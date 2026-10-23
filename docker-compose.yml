@@ -1,0 +1,49 @@
+# GameHall Torneios - ambiente de DESENVOLVIMENTO
+# Uso:  docker compose up --build
+name: gamehall
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gamehall
+      POSTGRES_USER: gamehall
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD no ficheiro .env}
+    ports:
+      - "127.0.0.1:5432:5432"   # só acessível a partir do teu computador
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gamehall -d gamehall"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Caixa de correio de teste: apanha todos os emails enviados pela API.
+  # Interface web: http://localhost:8025
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # Interface web
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"             # exposta na rede local para testares com telemóvel real
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=gamehall;Username=gamehall;Password=${POSTGRES_PASSWORD}"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Define JWT_SIGNING_KEY no ficheiro .env}
+      Security__Pepper: ${PASSWORD_PEPPER:?Define PASSWORD_PEPPER no ficheiro .env}
+      Smtp__Host: mailhog
+      Smtp__Port: "1025"
+
+volumes:
+  pgdata:

@@ -1,0 +1,77 @@
+### Pedidos de teste (VS Code: extensão "REST Client"; Rider/Visual Studio: suportado de origem)
+### Corre-os por ordem. O código de verificação chega ao MailHog: http://localhost:8025
+
+@host = http://localhost:8080
+
+### 1. Estado
+GET {{host}}/health/ready
+
+### 2. Versões dos documentos legais
+GET {{host}}/api/v1/legal/current
+
+### 3. Registo (a data de nascimento tem de dar 13 anos ou mais)
+POST {{host}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "ana@exemplo.pt",
+  "password": "cavalo bateria agrafo certo",
+  "displayName": "Ana",
+  "birthDate": "2005-04-12",
+  "acceptTerms": true,
+  "acceptPrivacy": true,
+  "termsVersion": "1.0.0",
+  "privacyVersion": "1.0.0"
+}
+
+### 4. Verificar email (substitui 123456 pelo código que vês no MailHog)
+POST {{host}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{ "email": "ana@exemplo.pt", "code": "123456" }
+
+### 5. Login
+# @name login
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "ana@exemplo.pt", "password": "cavalo bateria agrafo certo", "deviceName": "Teste" }
+
+###
+@accessToken = {{login.response.body.$.accessToken}}
+@refreshToken = {{login.response.body.$.refreshToken}}
+
+### 6. Perfil
+GET {{host}}/api/v1/me
+Authorization: Bearer {{accessToken}}
+
+### 7. Renovar sessão (o refresh token antigo deixa de funcionar)
+POST {{host}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{ "refreshToken": "{{refreshToken}}" }
+
+### 8. Exportar os meus dados
+GET {{host}}/api/v1/me/export
+Authorization: Bearer {{accessToken}}
+
+### 9. Esqueci-me da palavra-passe
+POST {{host}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{ "email": "ana@exemplo.pt" }
+
+### 10. Teste de idade mínima (deve devolver 403 age_too_young)
+POST {{host}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "crianca@exemplo.pt",
+  "password": "cavalo bateria agrafo certo",
+  "displayName": "Crianca",
+  "birthDate": "2018-01-01",
+  "acceptTerms": true,
+  "acceptPrivacy": true,
+  "termsVersion": "1.0.0",
+  "privacyVersion": "1.0.0"
+}

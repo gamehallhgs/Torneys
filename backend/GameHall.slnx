@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/GameHall.Api/GameHall.Api.csproj" />
+  <Project Path="tests/GameHall.Api.Tests/GameHall.Api.Tests.csproj" />
+</Solution>

@@ -1,0 +1,66 @@
+# MODELO de produção (VPS). Ainda não usado: precisa de domínio e revisão antes do lançamento.
+# Uso (no servidor):  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Diferenças face ao desenvolvimento:
+#  - a API e a base de dados NÃO são expostas; só o proxy (Caddy) recebe tráfego, em HTTPS automático
+#  - sem MailHog: tens de configurar um serviço de email real (Smtp__*)
+#  - segredos fortes obrigatórios (a API recusa arrancar com os valores de desenvolvimento)
+name: gamehall-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: gamehall
+      POSTGRES_USER: gamehall
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?obrigatório}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gamehall -d gamehall"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=gamehall;Username=gamehall;Password=${POSTGRES_PASSWORD}"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?obrigatório}
+      Security__Pepper: ${PASSWORD_PEPPER:?obrigatório}
+      Security__TrustProxyHeaders: "true"     # a API só é alcançável através do Caddy
+      Security__CheckPwnedPasswords: "true"
+      Smtp__Host: ${SMTP_HOST:?obrigatório}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__UseTls: "true"
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__FromAddress: ${SMTP_FROM:?obrigatório}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?obrigatório}   # ex.: api.o-teu-dominio.pt
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

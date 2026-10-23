@@ -1,0 +1,18 @@
+# Proxy inverso com HTTPS automático (Let's Encrypt). Só funciona com domínio real
+# a apontar para o IP do servidor.
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# Limite de tamanho de pedidos (os uploads de vídeo terão um limite próprio mais tarde)
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy api:8080
+}
