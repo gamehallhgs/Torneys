@@ -46,7 +46,7 @@ public static class TeamEndpoints
             Act(ctx, uid => svc.RequestJoinAsync(uid, teamId, ct))).RequireRateLimiting("auth");
 
         teams.MapPost("/invites", (Guid teamId, InviteRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
-            Act(ctx, uid => svc.InviteAsync(uid, teamId, req.Email, ct), StatusCodes.Status202Accepted))
+            Act(ctx, uid => svc.InviteAsync(uid, teamId, req.Email, req.Username, ct), StatusCodes.Status202Accepted))
             .RequireRateLimiting("auth");
 
         teams.MapPatch("/settings", (Guid teamId, UpdateTeamSettingsRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>

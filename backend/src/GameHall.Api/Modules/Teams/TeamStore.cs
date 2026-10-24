@@ -64,7 +64,7 @@ public sealed class TeamStore(NpgsqlDataSource db)
     public static async Task<IReadOnlyList<MemberRow>> MembersAsync(IDbConnection c, IDbTransaction? tx, Guid teamId) =>
         (await c.QueryAsync<MemberRow>(
             """
-            SELECT m.user_id, u.display_name, m.position, m.joined_at, (m.paid_at IS NOT NULL) AS paid
+            SELECT m.user_id, u.display_name, u.username, m.position, m.joined_at, (m.paid_at IS NOT NULL) AS paid
             FROM team_members m JOIN users u ON u.id = m.user_id
             WHERE m.team_id = @T
             ORDER BY m.joined_at, u.display_name
@@ -74,7 +74,7 @@ public sealed class TeamStore(NpgsqlDataSource db)
     public static async Task<IReadOnlyList<PendingRow>> PendingRequestsAsync(IDbConnection c, Guid teamId) =>
         (await c.QueryAsync<PendingRow>(
             """
-            SELECT r.id, r.user_id, u.display_name, r.created_at
+            SELECT r.id, r.user_id, u.display_name, u.username, r.created_at
             FROM join_requests r JOIN users u ON u.id = r.user_id
             WHERE r.team_id = @T AND r.status = 'pending'
             ORDER BY r.created_at
@@ -84,7 +84,7 @@ public sealed class TeamStore(NpgsqlDataSource db)
     public static async Task<IReadOnlyList<PendingRow>> PendingInvitesAsync(IDbConnection c, Guid teamId) =>
         (await c.QueryAsync<PendingRow>(
             """
-            SELECT i.id, i.invited_user_id AS user_id, u.display_name, i.created_at
+            SELECT i.id, i.invited_user_id AS user_id, u.display_name, u.username, i.created_at
             FROM team_invites i JOIN users u ON u.id = i.invited_user_id
             WHERE i.team_id = @T AND i.status = 'pending'
             ORDER BY i.created_at

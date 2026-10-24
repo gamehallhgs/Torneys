@@ -23,7 +23,7 @@ Erros de validação trazem também `errors`: `{ "password": ["..."] }`.
 ## Autenticação (público)
 | Método | Caminho | Corpo | Resposta |
 |---|---|---|---|
-| POST | `/api/v1/auth/register` | `email, password, displayName, birthDate (AAAA-MM-DD), acceptTerms, acceptPrivacy, termsVersion, privacyVersion` | 202 (sempre igual). 403 `age_too_young` se < 13 anos |
+| POST | `/api/v1/auth/register` | `email, password, displayName, username, birthDate (AAAA-MM-DD), acceptTerms, acceptPrivacy, termsVersion, privacyVersion` | 202 (sempre igual para o email). 403 `age_too_young` se < 13 anos. 400 `validation_error` com `fields.username` se o username for inválido, reservado ou já estiver em uso |
 | POST | `/api/v1/auth/verify-email` | `email, code` | 204, ou 400 `invalid_code` |
 | POST | `/api/v1/auth/resend-verification` | `email` | 202 |
 | POST | `/api/v1/auth/login` | `email, password, deviceName?` | 200 com tokens; 401 `invalid_credentials`; 403 `email_not_verified` |
@@ -39,7 +39,7 @@ Resposta de login/refresh:
   "accessToken": "...",
   "expiresIn": 900,
   "refreshToken": "...",
-  "user": { "id": "...", "email": "...", "displayName": "...", "role": "Player", "emailVerified": true, "birthDate": "2008-05-01" },
+  "user": { "id": "...", "email": "...", "displayName": "...", "username": "hugo", "usernameTag": "482", "usernameNextChangeAt": null, "role": "Player", "emailVerified": true, "birthDate": "2008-05-01" },
   "legal": { "termsVersion": "1.0.0", "privacyVersion": "1.0.0", "requiresAcceptance": false }
 }
 ```
@@ -49,11 +49,22 @@ Se `legal.requiresAcceptance` for `true`, a app mostra os documentos e chama `PO
 | Método | Caminho | Corpo | Descrição |
 |---|---|---|---|
 | GET | `/api/v1/me` | | Perfil |
+| PATCH | `/api/v1/me/username` | `username` | Muda o username (1 vez por mês; a tag mantém-se). `{username, tag, nextChangeAt}`. 409 `username_taken`, `username_reserved`, `username_change_cooldown` (a mensagem diz a data) |
 | POST | `/api/v1/me/consents` | `termsVersion, privacyVersion` | Aceitar as versões atuais |
 | POST | `/api/v1/me/change-password` | `currentPassword, newPassword` | Termina todas as sessões |
 | POST | `/api/v1/me/logout-all` | | Termina todas as sessões |
 | GET | `/api/v1/me/export` | | Exportar os dados (RGPD) |
 | POST | `/api/v1/me/delete` | `password` | Eliminar e anonimizar a conta |
+
+### Username e tag
+- **Username** (`@hugo`): único, 3 a 20 caracteres, só minúsculas, números, `.` e `_`; não começa nem acaba em `.` ou `_`; sem `..`. Guarda-se sempre em minúsculas (`Hugo` = `hugo`). Há nomes reservados (`admin`, `suporte`...) e nada que contenha `gamehall` (ver `UsernameRules.Reserved`).
+- **Tag** (`#482`): 3 algarismos ao acaso atribuídos na criação da conta; **não muda** quando se muda o username. Só o próprio a vê (`user.usernameTag`); os outros jogadores só veem o `@username`. Para convidar é preciso o par completo, `hugo#482`.
+- Mudar: 1 vez por mês (a primeira mudança é livre). O username antigo fica reservado 30 dias (só o antigo dono o pode recuperar). Ao eliminar a conta o username liberta-se.
+- O email nunca é mostrado a outros jogadores nem no perfil da app.
+
+| Método | Caminho | Descrição |
+|---|---|---|
+| GET | `/api/v1/usernames/check?username=hugo` | Público (usado no registo), 30 pedidos por minuto por IP. `{available, reason?, message?}` (`reason`: `invalid`, `reserved`, `taken`, `recently_used`) |
 
 Todos os outros endpoints (fases seguintes) exigem sessão **e** termos em dia.
 
@@ -85,10 +96,10 @@ Erros: ProblemDetails com `code` estável. Ações sem corpo de resposta devolve
 | Método e rota | Descrição |
 |---|---|
 | `POST /api/v1/tournaments/{id}/teams` `{name, colorHex}` | Cria equipa (quem cria é o líder). `201` com o lobby. Erros: `team_name_taken`, `team_color_taken`, `already_in_team`, `registration_closed`, `age_too_young`, `age_too_old`, `tournament_full` |
-| `GET /api/v1/teams/{id}` | Lobby. Qualquer jogador vê `members` (nome e posição) de qualquer equipa; `paid` só aparece para membros (`null` para os outros). Só o líder vê `requests` e `invites`. `team.closedToRequests` e `team.membersCanInvite` são as definições; `me` indica o que o utilizador pode fazer (`canRequestToJoin`, `joinBlockedReason`, `canInvite`) |
+| `GET /api/v1/teams/{id}` | Lobby. Qualquer jogador vê `members` (nome, `username` e posição) de qualquer equipa; `paid` só aparece para membros (`null` para os outros). Só o líder vê `requests` e `invites`. `team.closedToRequests` e `team.membersCanInvite` são as definições; `me` indica o que o utilizador pode fazer (`canRequestToJoin`, `joinBlockedReason`, `canInvite`) |
 | `PATCH /api/v1/teams/{id}/settings` `{closedToRequests?, membersCanInvite?}` | Só o líder, a qualquer momento (só muda os campos enviados; `400` se não vier nenhum). Ver Definições do lobby |
 | `POST /api/v1/teams/{id}/join-requests` | Pedir para entrar |
-| `POST /api/v1/teams/{id}/invites` `{email}` | Convite direto (líder, ou qualquer membro se `membersCanInvite`). Outros membros: `403 invite_not_allowed`; não-membros: `403 not_team_member`. `202` sempre com a mesma resposta, exista ou não conta |
+| `POST /api/v1/teams/{id}/invites` `{email}` ou `{username: "hugo#482"}` | Convite direto (líder, ou qualquer membro se `membersCanInvite`). Por username#tag: `404 user_not_found` ("Este utilizador não se encontra na app.") se o par não existir (conta por verificar conta como inexistente), `429 too_many_failed_lookups` ao fim de 10 tentativas falhadas por hora, `400` se faltar a tag. Máx. 40 convites pendentes por equipa (`too_many_invites`). Outros membros: `403 invite_not_allowed`; não-membros: `403 not_team_member`. `409 cannot_invite_self` se o email for o do próprio; `409 invitee_already_in_team` ("O jogador X já se encontra numa equipa do mesmo torneio.") se o convidado já está numa equipa desse torneio. Para emails sem conta (ou por verificar) a resposta é sempre `202`, igual à de sucesso, para não revelar quem tem conta |
 | `POST /api/v1/teams/{id}/position` `{position}` | Posição principal (`GK,RB,CB,LB,RWB,LWB,CDM,CM,CAM,RM,LM,RW,LW,CF,ST`) |
 | `POST /api/v1/teams/{id}/transfer-host` `{userId}` | Passar a liderança |
 | `POST /api/v1/teams/{id}/leave` | Sair (só com inscrições abertas). Líder com outros membros: `host_must_transfer`. Último membro: a equipa é eliminada |
@@ -106,6 +117,15 @@ Um serviço em segundo plano (de minuto a minuto, `Lifecycle:Enabled`) fecha as 
 - **Lobby fechado** (`closedToRequests`): ninguém de fora pode pedir para entrar (`409 lobby_closed`, `me.joinBlockedReason = lobby_closed`); só entra quem for convidado. Pedidos que já estavam pendentes mantêm-se para o líder decidir. Convites continuam a funcionar.
 - **Membros convidam** (`membersCanInvite`): se ligado, qualquer membro pode enviar convites; se desligado, só o líder. Os convites pendentes só o líder os vê e cancela.
 - Qualquer jogador pode ver os membros de outras equipas, mas só pode pedir para entrar se não estiver já noutra equipa do torneio (`already_in_team`), a equipa não estiver confirmada nem completa e o lobby estiver aberto.
+
+## Notificações (exige sessão e termos em dia)
+| Método | Caminho | Descrição |
+|---|---|---|
+| GET | `/api/v1/notifications` | Até 50 notificações, mais recentes primeiro: `{ unreadCount, items:[{id,type,createdAt,read,invite}] }`. Por agora só existe `type = team_invite`, com `invite: {inviteId,status,teamId,teamName,colorHex,tournamentId,tournamentName,invitedByName}` (`status`: `pending`, `accepted`, `declined`, `cancelled`) |
+| GET | `/api/v1/notifications/unread-count` | `{ count }`: leve, a app pergunta de tempos a tempos para mostrar o pontinho vermelho |
+| POST | `/api/v1/notifications/read-all` | Marca todas como lidas (a app chama ao abrir a central). `204` |
+
+Quando alguém convida um jogador (`POST /teams/{id}/invites`), é criada uma notificação para o convidado na mesma transação do convite (e continua a ser enviado o email). Só se cria se o convite for novo: reenviar um convite ainda pendente não duplica. Para responder: `POST /api/v1/invites/{inviteId}/accept|decline` (como antes). Os textos e o `status` lêem-se do convite no momento da listagem, por isso nunca ficam desatualizados; se a equipa for eliminada, a notificação desaparece.
 
 ## Jogos, classificação e estatísticas (só leitura; exige sessão e termos em dia)
 

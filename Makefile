@@ -1,5 +1,5 @@
 # Atalhos para Linux/macOS. No Windows usa:  .\scripts\dev.ps1 <comando>
-.PHONY: help setup up down logs reset test api-logs seed seed-remove pay-sim
+.PHONY: help setup up down logs reset test api-logs seed seed-remove pay-sim invite-sim
 
 help:
 	@echo "make setup  - cria o ficheiro .env a partir de .env.example (se não existir)"
@@ -10,6 +10,7 @@ help:
 	@echo "make seed        - cria torneios de DEMONSTRAÇÃO (marcados is_demo)"
 	@echo "make seed-remove - apaga SÓ os dados de demonstração"
 	@echo "make pay-sim TEAM=\"Nome\" - (testes) marca todos os jogadores da equipa como pagos"
+	@echo "make invite-sim TEAM=\"Nome\" TORNEIO=\"parte do nome\" EMAIL=a@b.pt - (testes) a equipa convida essa conta"
 	@echo "make test   - corre os testes do backend (usa a imagem .NET, não precisas do SDK)"
 
 setup:
@@ -41,3 +42,7 @@ seed-remove:
 pay-sim:
 	@test -n "$(TEAM)" || (echo 'Uso: make pay-sim TEAM="Nome da equipa"' && exit 1)
 	docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v team="$(TEAM)" < backend/seed/dev_mark_paid.sql
+
+invite-sim:
+	@test -n "$(TEAM)" -a -n "$(EMAIL)" || (echo 'Uso: make invite-sim TEAM="Nome da equipa" TORNEIO="parte do nome do torneio" EMAIL=eu@exemplo.pt' && exit 1)
+	docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v team="$(TEAM)" -v email="$(EMAIL)" -v tournament="$(TORNEIO)" < backend/seed/dev_invite.sql

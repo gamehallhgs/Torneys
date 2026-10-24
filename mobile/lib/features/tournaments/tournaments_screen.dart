@@ -7,10 +7,12 @@ import '../../core/theme.dart';
 import '../../widgets/gh_widgets.dart';
 import '../geo/geo_models.dart';
 import '../geo/location_picker.dart';
+import '../notifications/notification_bell.dart';
 import '../teams/pending_section.dart';
 import '../teams/team_lobby_screen.dart';
 import '../teams/team_models.dart';
 import '../teams/teams_repository.dart';
+import 'chip_tabs_row.dart';
 import 'tournament_card.dart';
 import 'tournament_detail_screen.dart';
 import 'tournament_models.dart';
@@ -51,8 +53,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   bool _loading = false;
   String? _error;
 
-  // "Os meus torneios": convites recebidos e pedidos enviados.
-  List<MyInvolvement> _invites = const [];
+  // "Os meus torneios": pedidos enviados. Os convites recebidos estão na central de notificações (sino).
   List<MyInvolvement> _requests = const [];
   bool _acting = false;
   String? _actionError;
@@ -121,16 +122,12 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     }
   }
 
-  /// Falhas aqui não escondem a lista de torneios: só ficam no log.
+  /// Pedidos enviados. Falhas aqui não escondem a lista de torneios: só ficam no log.
   Future<void> _loadInvolvements(int generation) async {
     try {
-      final invites = await _teams.myInvites();
       final requests = await _teams.myRequests();
       if (mounted && generation == _generation) {
-        setState(() {
-          _invites = invites;
-          _requests = requests;
-        });
+        setState(() => _requests = requests);
       }
     } catch (e, st) {
       debugPrint('[GameHall] convites/pedidos falharam: $e\n$st');
@@ -174,7 +171,6 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     }
     setState(() {
       _status = status;
-      _invites = const [];
       _requests = const [];
       _actionError = null;
     });
@@ -247,24 +243,12 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final tab in _tabs) ...[
-                  ChoiceChip(
-                    label: Text(tab.$2),
-                    selected: _status == tab.$1,
-                    onSelected: (_) => _changeStatus(tab.$1),
-                    selectedColor: GhColors.primary,
-                    backgroundColor: GhColors.fieldFill,
-                    labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                    side: const BorderSide(color: GhColors.fieldBorder),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
+          ChipTabsRow(
+            tabs: _tabs,
+            selected: _status,
+            onSelected: _changeStatus,
+            // Central de notificações (convites para equipas), com pontinho vermelho quando há novas.
+            trailing: NotificationBell(onReturn: () => _load(reset: true)),
           ),
           const SizedBox(height: 8),
           Row(
@@ -353,12 +337,9 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
           if (_actionError != null) GhBanner.error(_actionError!),
           if (_status == 'mine')
             PendingSection(
-              invites: _invites,
               requests: _requests,
               busy: _acting,
               onOpen: _openTeam,
-              onAccept: (id) => _act(() => _teams.acceptInvite(id)),
-              onDecline: (id) => _act(() => _teams.declineInvite(id)),
               onCancelRequest: (id) => _act(() => _teams.cancelRequest(id)),
             ),
           if (_error != null) ...[

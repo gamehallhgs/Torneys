@@ -9,7 +9,8 @@ public static partial class TeamRules
     public static readonly string[] Positions =
         ["GK", "RB", "CB", "LB", "RWB", "LWB", "CDM", "CM", "CAM", "RM", "LM", "RW", "LW", "CF", "ST"];
 
-    public const int MaxPendingInvitesPerTeam = 20;
+    /// <summary>Convites pendentes em simultâneo por equipa.</summary>
+    public const int MaxPendingInvitesPerTeam = 40;
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Spaces();

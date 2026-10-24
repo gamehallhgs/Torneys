@@ -62,6 +62,7 @@ class AuthController extends ChangeNotifier {
     required String email,
     required String password,
     required String displayName,
+    required String username,
     required String birthDateApi,
     required LegalInfo legal,
   }) async {
@@ -69,6 +70,7 @@ class AuthController extends ChangeNotifier {
       'email': email.trim(),
       'password': password,
       'displayName': displayName.trim(),
+      'username': username.trim(),
       'birthDate': birthDateApi,
       'acceptTerms': true,
       'acceptPrivacy': true,
@@ -167,6 +169,24 @@ class AuthController extends ChangeNotifier {
             }))
         .ensureOk();
     // A API revoga as outras sessões; esta continua válida.
+  }
+
+  /// Muda o username (1 vez por mês). A tag mantém-se.
+  Future<void> changeUsername(String username) async {
+    final res = (await api.patch('/api/v1/me/username',
+            auth: true, body: <String, dynamic>{'username': username.trim()}))
+        .ensureOk();
+    final current = _user;
+    if (current != null) {
+      _user = current.copyWith(
+        username: (res.json['username'] ?? current.username).toString(),
+        usernameTag: (res.json['usernameTag'] ?? current.usernameTag).toString(),
+        usernameNextChangeAt: res.json['nextChangeAt'] == null
+            ? null
+            : DateTime.tryParse(res.json['nextChangeAt'].toString())?.toLocal(),
+      );
+      notifyListeners();
+    }
   }
 
   Future<String> exportData() async {

@@ -8,6 +8,7 @@ using GameHall.Api.Infrastructure.Security;
 using GameHall.Api.Modules.Auth;
 using GameHall.Api.Modules.Legal;
 using GameHall.Api.Modules.Me;
+using GameHall.Api.Modules.Notifications;
 using GameHall.Api.Modules.Games;
 using GameHall.Api.Modules.Geo;
 using GameHall.Api.Modules.Teams;
@@ -69,6 +70,8 @@ builder.Services.AddSingleton<AuthStore>();
 builder.Services.AddSingleton<TournamentStore>();
 builder.Services.AddSingleton<GameStore>();
 builder.Services.AddSingleton<TeamStore>();
+builder.Services.AddSingleton<NotificationStore>();
+builder.Services.AddSingleton<UsernameStore>();
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddSingleton<TeamConfirmationService>();
 builder.Services.AddHostedService<RegistrationLifecycleService>();
@@ -133,6 +136,15 @@ builder.Services.AddRateLimiter(o =>
         RateLimitPartition.GetFixedWindowLimiter(ctx.Ip(), _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = builder.Environment.IsDevelopment() ? 100 : 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+
+    // Disponibilidade de username (escrever no ecrã de registo): 30 por minuto por IP
+    o.AddPolicy("lookup", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(ctx.Ip(), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));
@@ -229,10 +241,12 @@ app.MapGet("/health/ready", async (NpgsqlDataSource db, CancellationToken ct) =>
 app.MapLegalEndpoints();
 app.MapAuthEndpoints();
 app.MapMeEndpoints();
+app.MapUsernameEndpoints();
 app.MapTournamentEndpoints();
 app.MapGameEndpoints();
 app.MapGeoEndpoints();
 app.MapTeamEndpoints();
+app.MapNotificationEndpoints();
 
 app.Run();
 

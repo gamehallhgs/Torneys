@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/auth_scope.dart';
 import '../../core/error_messages.dart';
 import '../../widgets/gh_widgets.dart';
 import '../auth/screens/legal_viewer_screen.dart';
 import 'change_password_screen.dart';
+import 'change_username_screen.dart';
 import 'delete_account_screen.dart';
 import 'export_data_screen.dart';
 
@@ -58,10 +60,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       title: 'Perfil',
       children: [
         if (_error != null) GhBanner.error(_error!),
+        // O email não se mostra no perfil (nem aos outros jogadores): só o nome e o username.
         _InfoRow(label: 'Nome', value: user?.displayName ?? ''),
-        _InfoRow(label: 'Email', value: user?.email ?? ''),
+        _HandleRow(handle: user?.handle ?? ''),
         _InfoRow(label: 'Data de nascimento', value: _formatBirth(user?.birthDate)),
         const SizedBox(height: 24),
+        GhButton(
+          label: 'Mudar username',
+          secondary: true,
+          onPressed: () => _push(const ChangeUsernameScreen()),
+        ),
+        const SizedBox(height: 12),
         GhButton(
           label: 'Alterar palavra-passe',
           secondary: true,
@@ -137,6 +146,50 @@ class _InfoRow extends StatelessWidget {
           Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 2),
           Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+/// "@hugo#482" com botão para copiar (é o que os amigos escrevem para te convidar).
+class _HandleRow extends StatelessWidget {
+  const _HandleRow({required this.handle});
+
+  final String handle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Username', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(handle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                const Text(
+                  'Partilha-o para te convidarem para equipas.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Copiar',
+            icon: const Icon(Icons.copy, size: 20),
+            onPressed: handle.isEmpty
+                ? null
+                : () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await Clipboard.setData(ClipboardData(text: handle.substring(1)));
+                    messenger.showSnackBar(const SnackBar(content: Text('Username copiado.')));
+                  },
+          ),
         ],
       ),
     );

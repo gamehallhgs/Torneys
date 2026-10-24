@@ -6,6 +6,9 @@ class AppUser {
     required this.role,
     required this.emailVerified,
     required this.birthDate,
+    this.username = '',
+    this.usernameTag = '',
+    this.usernameNextChangeAt,
   });
 
   final String id;
@@ -15,6 +18,32 @@ class AppUser {
   final bool emailVerified;
   final String birthDate;
 
+  /// @username (único) e tag de 3 algarismos (fixa). Os outros convidam-te com "username#tag".
+  final String username;
+  final String usernameTag;
+
+  /// Quando voltas a poder mudar o username (null = já podes).
+  final DateTime? usernameNextChangeAt;
+
+  /// "@hugo#482"
+  String get handle => username.isEmpty ? '' : '@$username#$usernameTag';
+
+  /// Pode mudar o username agora?
+  bool canChangeUsername({DateTime? now}) =>
+      usernameNextChangeAt == null || !usernameNextChangeAt!.isAfter(now ?? DateTime.now());
+
+  AppUser copyWith({String? username, String? usernameTag, DateTime? usernameNextChangeAt}) => AppUser(
+        id: id,
+        email: email,
+        displayName: displayName,
+        role: role,
+        emailVerified: emailVerified,
+        birthDate: birthDate,
+        username: username ?? this.username,
+        usernameTag: usernameTag ?? this.usernameTag,
+        usernameNextChangeAt: usernameNextChangeAt,
+      );
+
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
         id: (json['id'] ?? '').toString(),
         email: (json['email'] ?? '').toString(),
@@ -22,6 +51,11 @@ class AppUser {
         role: (json['role'] ?? 'Player').toString(),
         emailVerified: json['emailVerified'] == true,
         birthDate: (json['birthDate'] ?? '').toString(),
+        username: (json['username'] ?? '').toString(),
+        usernameTag: (json['usernameTag'] ?? '').toString(),
+        usernameNextChangeAt: json['usernameNextChangeAt'] == null
+            ? null
+            : DateTime.tryParse(json['usernameNextChangeAt'].toString())?.toLocal(),
       );
 }
 

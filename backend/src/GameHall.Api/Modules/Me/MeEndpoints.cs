@@ -77,6 +77,8 @@ public static class MeEndpoints
                     user.Id,
                     user.Email,
                     user.DisplayName,
+                    user.Username,
+                    user.UsernameTag,
                     user.BirthDate,
                     role = user.Role.ToString(),
                     user.EmailVerifiedAt,

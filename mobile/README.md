@@ -149,3 +149,24 @@ Os torneios a decorrer, fechados e terminados têm todas as equipas confirmadas.
 - Na lista de torneios há um botão **Localidade**: escolhe o distrito (18) e, se quiseres, o concelho; só aparecem os torneios dessa zona. O mesmo botão tem "Todo o país" para limpar.
 - Corrigido: no filtro de modalidades já podes voltar a **Todas as modalidades**.
 - Casos de demo: *Dragões Urbanos* (Taça Outono) tem o lobby fechado; *Tubarões FC* (Taça Outono) deixa os membros convidar; *Leões do Norte* (Futsal Jovem) tem as duas definições ligadas. Os torneios demo estão em Porto, Braga, Lisboa, Faro e Coimbra (vários concelhos).
+
+## Notificações (sino ao lado de "Os meus torneios")
+
+- O sino fica na linha dos separadores (Abertos, A decorrer, Terminados, Os meus torneios). Aparece um **pontinho vermelho** quando há notificações novas; a app verifica de 45 em 45 segundos e ao voltar à app.
+- Por agora só existem **convites para equipas**: quem recebe vê quem o convidou, a equipa e o torneio, com **Aceitar** / **Recusar** (e "Ver equipa e jogadores"). Depois de tratado o cartão mostra o resultado. Abrir a central marca tudo como lido (o pontinho desaparece).
+- Os convites **já não aparecem em "Os meus torneios"**; lá ficam só os pedidos que enviaste.
+- Para testar sem segunda conta: `make invite-sim TEAM="Dragões Urbanos" TORNEIO="Outono" EMAIL=o.teu@email.pt` (Windows: `.\scripts\dev.ps1 invite-sim "Dragões Urbanos" o.teu@email.pt "Outono"`). A equipa demo convida a tua conta e o sino ganha o pontinho no ciclo seguinte (ou puxa para atualizar).
+
+## Avisos ao convidar
+
+Ao convidar por email, o resultado aparece dentro da caixa "Convidar jogador": **verde** quando o convite é enviado e **vermelho** quando não pode ser, por exemplo "O jogador X já se encontra numa equipa do mesmo torneio." ou "Não te podes convidar a ti próprio.".
+
+## Username (@) e tag (#)
+
+- Ao **criar conta** escolhes o **nome** (como os outros te veem) e um **username** único (3 a 20 caracteres: minúsculas, números, `.` e `_`). A app diz "Disponível" ou o motivo enquanto escreves.
+- Recebes também uma **tag de 3 algarismos** (ex.: `#482`) ao acaso, que **não muda** mesmo que mudes o username. O teu identificador completo é `@hugo#482` (no Perfil, com botão para copiar). Só tu vês a tua tag.
+- **Perfil:** mostra o nome e o username (o email já não aparece). "Mudar username": 1 vez por mês; o antigo fica reservado 30 dias.
+- **Convidar** (lobby): o mesmo campo aceita **email** ou **`username#tag`** (ex.: `hugo#482`). Se o username#tag não existir, o aviso vermelho diz "Este utilizador não se encontra na app."; se existir, o aviso verde diz "@hugo foi convidado para o lobby." (e a pessoa recebe a notificação). Máximo de 10 tentativas falhadas por hora e 40 convites pendentes por equipa.
+- Nos lobbys os jogadores aparecem como "Nome @username" (sem a tag).
+- Contas que já existiam receberam um username gerado a partir do nome e uma tag; podes mudá-lo logo uma vez, mesmo que seja o primeiro mês.
+- Demo: os 300 jogadores demo têm username e tag previsíveis, por exemplo `joao.silva#007`, `rui.silva#014`, `tiago.silva#021` (tag = 7 × número). Experimenta convidá-los pelo lobby de uma equipa tua.

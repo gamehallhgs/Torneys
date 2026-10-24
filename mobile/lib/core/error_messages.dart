@@ -57,6 +57,19 @@ String friendlyError(Object error) {
       return 'O torneio já tem todas as equipas confirmadas.';
     case 'team_confirmed':
       return 'A equipa já está confirmada e fechada: não aceita nem perde jogadores.';
+    case 'cannot_invite_self':
+    case 'invitee_already_in_team':
+    case 'user_not_found':
+    case 'too_many_failed_lookups':
+    case 'username_taken':
+    case 'username_reserved':
+    case 'username_change_cooldown':
+      // A mensagem do servidor já vem em português e completa (nome do jogador, data da próxima mudança...).
+      return error.message;
+    case 'lobby_closed':
+      return 'O líder fechou este lobby: só se entra por convite.';
+    case 'invite_not_allowed':
+      return 'Nesta equipa só o líder pode convidar.';
     case 'invalid_position':
       return 'Posição inválida.';
     case 'game_not_found':

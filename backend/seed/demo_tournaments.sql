@@ -159,21 +159,25 @@ WHERE tm.is_demo;
 CREATE TEMP TABLE _du ON COMMIT DROP AS
 SELECT g AS idx, gen_random_uuid() AS id FROM generate_series(1, 300) g;
 
-INSERT INTO users (id, email, password_hash, display_name, birth_date, role, email_verified_at,
-                   created_at, updated_at, is_demo)
+INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, role,
+                   email_verified_at, created_at, updated_at, is_demo)
 SELECT du.id,
        'demo.' || lpad(du.idx::text, 3, '0') || '@gamehall.demo',
        '!demo-sem-login',
-       (ARRAY['João','Rui','Tiago','Pedro','Diogo','André','Miguel','Bruno','Hugo','Nuno',
-              'Rafael','Tomás','Gonçalo','Ricardo','Filipe','David','Marco','Luís','Sérgio','Vasco'])[1 + (du.idx - 1) % 20]
-         || ' ' ||
-       (ARRAY['Silva','Costa','Mendes','Alves','Ramos','Pinto','Faria','Teixeira','Matos','Barros',
-              'Ferreira','Santos','Oliveira','Pereira','Lopes'])[1 + ((du.idx - 1) / 20) % 15],
+       nm.first || ' ' || nm.last,
+       -- @joao.silva (único: 20 nomes x 15 apelidos) com tag fixa e previsível (para testar convites)
+       translate(lower(nm.first || '.' || nm.last), 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn'),
+       lpad(((du.idx * 7) % 1000)::text, 3, '0'),
        CASE WHEN du.idx <= 264
             THEN date '1990-01-01' + ((du.idx * 37) % 5000)      -- adultos (~19 a 36 anos)
             ELSE date '2010-01-01' + ((du.idx * 17) % 700) END,  -- jovens (14-16 anos)
        0, now(), now(), now(), true
-FROM _du du;
+FROM _du du
+CROSS JOIN LATERAL (SELECT
+  (ARRAY['João','Rui','Tiago','Pedro','Diogo','André','Miguel','Bruno','Hugo','Nuno',
+         'Rafael','Tomás','Gonçalo','Ricardo','Filipe','David','Marco','Luís','Sérgio','Vasco'])[1 + (du.idx - 1) % 20] AS first,
+  (ARRAY['Silva','Costa','Mendes','Alves','Ramos','Pinto','Faria','Teixeira','Matos','Barros',
+         'Ferreira','Santos','Oliveira','Pereira','Lopes'])[1 + ((du.idx - 1) / 20) % 15] AS last) nm;
 
 -- Plano para os torneios com inscrições abertas (mínimo e máximo de jogadores vêm do torneio).
 -- Sem linha no plano: a equipa tem o mínimo de jogadores e todos pagaram.

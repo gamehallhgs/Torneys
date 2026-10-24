@@ -26,6 +26,10 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
   bool _started = false;
   final _inviteEmail = TextEditingController();
 
+  // Resultado do último convite: aparece dentro da caixa "Convidar jogador" (vermelho = erro, verde = enviado).
+  String? _inviteError;
+  String? _inviteInfo;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -142,21 +146,49 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
   }
 
   Future<void> _sendInvite(TeamLobby lobby) async {
-    final email = _inviteEmail.text.trim();
-    if (Validators.email(email) != null) {
+    if (_busy) {
+      return;
+    }
+    final input = _inviteEmail.text.trim();
+    // "hugo#482" (ou "@hugo#482") = username#tag; qualquer outra coisa tem de ser um email.
+    final isHandle = input.contains('#');
+    final handle = isHandle ? Validators.parseHandle(input) : null;
+    final problem = isHandle
+        ? (handle == null ? 'Escreve o username com a tag de 3 algarismos, por exemplo hugo#482.' : null)
+        : (Validators.email(input) != null ? 'Indica um email ou um username#tag válido.' : null);
+    if (problem != null) {
       setState(() {
-        _error = 'Indica um email válido.';
-        _info = null;
+        _inviteError = problem;
+        _inviteInfo = null;
       });
       return;
     }
-    final ok = await _run(
-      () => _repo.invite(lobby.id, email),
-      success:
-          'Se esse email tiver conta no GameHall, a pessoa recebe o convite. Por privacidade não dizemos se existe.',
-    );
-    if (ok) {
+    setState(() {
+      _busy = true;
+      _inviteError = null;
+      _inviteInfo = null;
+      _error = null;
+      _info = null;
+    });
+    try {
+      if (handle != null) {
+        await _repo.invite(lobby.id, username: '${handle.username}#${handle.tag}');
+        _inviteInfo = '@${handle.username} foi convidado para o lobby.';
+      } else {
+        await _repo.invite(lobby.id, email: input);
+        _inviteInfo =
+            'Se esse email tiver conta no GameHall, a pessoa recebe o convite. Por privacidade não dizemos se existe.';
+      }
       _inviteEmail.clear();
+    } catch (e, st) {
+      debugPrint('[GameHall] convite falhou: $e\n$st');
+      _inviteError = friendlyError(e);
+    }
+    if (mounted) {
+      await _load();
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -332,8 +364,19 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(m.isMe ? '${m.displayName} (tu)' : m.displayName,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Text.rich(
+                  TextSpan(
+                    text: m.isMe ? '${m.displayName} (tu)' : m.displayName,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    children: [
+                      if (m.username.isNotEmpty)
+                        TextSpan(
+                          text: '  @${m.username}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Colors.white60),
+                        ),
+                    ],
+                  ),
+                ),
                 Text(
                   m.position == null ? 'Sem posição' : TeamLabels.position(m.position!),
                   style: const TextStyle(color: Colors.white60, fontSize: 12),
@@ -388,7 +431,7 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Expanded(child: Text(r.displayName)),
+                  Expanded(child: Text(r.label)),
                   IconButton(
                     tooltip: 'Recusar',
                     icon: const Icon(Icons.close, color: GhColors.error),
@@ -414,7 +457,8 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
       children: [
         GhTextField(
           controller: _inviteEmail,
-          label: 'Email do jogador',
+          label: 'Email ou username#tag',
+          helperText: 'Ex.: hugo#482 ou nome@email.pt',
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.send,
           onSubmitted: (_) => _sendInvite(l),
@@ -424,13 +468,16 @@ class _TeamLobbyScreenState extends State<TeamLobbyScreen> {
           secondary: true,
           onPressed: _busy ? null : () => _sendInvite(l),
         ),
+        if (_inviteError != null || _inviteInfo != null) const SizedBox(height: 14),
+        if (_inviteError != null) GhBanner.error(_inviteError!),
+        if (_inviteInfo != null) GhBanner.success(_inviteInfo!),
         if (l.invites.isNotEmpty) ...[
           const SizedBox(height: 12),
           const Text('Convites pendentes', style: TextStyle(color: Colors.white60, fontSize: 12)),
           for (final i in l.invites)
             Row(
               children: [
-                Expanded(child: Text(i.displayName)),
+                Expanded(child: Text(i.label)),
                 TextButton(
                   onPressed: _busy ? null : () => _run(() => _repo.cancelInvite(i.id)),
                   child: const Text('Cancelar'),

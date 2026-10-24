@@ -18,6 +18,51 @@ class Validators {
     return null;
   }
 
+  /// "  @Hugo " -> "hugo" (igual ao servidor).
+  static String normalizeUsername(String? value) {
+    var s = (value ?? '').trim();
+    if (s.startsWith('@')) {
+      s = s.substring(1);
+    }
+    return s.toLowerCase();
+  }
+
+  static final RegExp _usernameShape = RegExp(r'^[a-z0-9][a-z0-9._]{1,18}[a-z0-9]$');
+
+  /// Username: 3 a 20 caracteres, minúsculas, números, "." e "_"; sem começar/acabar em "." ou "_" nem ".." seguidos.
+  /// (Nomes reservados e usernames já usados só o servidor sabe.)
+  static String? username(String? value) {
+    final s = normalizeUsername(value);
+    if (s.isEmpty) {
+      return 'Escolhe um username.';
+    }
+    if (s.length < 3 || s.length > 20) {
+      return 'O username deve ter entre 3 e 20 caracteres.';
+    }
+    if (s.contains('..')) {
+      return 'Não uses dois pontos seguidos.';
+    }
+    if (!_usernameShape.hasMatch(s)) {
+      return 'Usa só letras minúsculas, números, "." e "_", e não comeces nem acabes com "." ou "_".';
+    }
+    return null;
+  }
+
+  static final RegExp _handleShape = RegExp(r'^@?([^#\s]+)\s*#\s*(\d{3})$');
+
+  /// "hugo#482" / "@Hugo#482" -> (username, tag); null se não tiver o formato certo (a tag é obrigatória).
+  static ({String username, String tag})? parseHandle(String? value) {
+    final m = _handleShape.firstMatch((value ?? '').trim());
+    if (m == null) {
+      return null;
+    }
+    final name = normalizeUsername(m.group(1));
+    if (username(name) != null) {
+      return null;
+    }
+    return (username: name, tag: m.group(2)!);
+  }
+
   static String? displayName(String? value) {
     final text = (value ?? '').trim();
     if (text.length < 2 || text.length > 40) {

@@ -40,6 +40,7 @@ public sealed class MemberRow
 {
     public Guid UserId { get; set; }
     public string DisplayName { get; set; } = "";
+    public string Username { get; set; } = "";
     public string? Position { get; set; }
     public DateTime JoinedAt { get; set; }
     public bool Paid { get; set; }
@@ -50,6 +51,7 @@ public sealed class PendingRow
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string DisplayName { get; set; } = "";
+    public string Username { get; set; } = "";
     public DateTime CreatedAt { get; set; }
 }
 
@@ -114,7 +116,8 @@ public sealed class MyRequestRow
 
 public sealed record CreateTeamRequest(string? Name, string? ColorHex);
 
-public sealed record InviteRequest(string? Email);
+/// <summary>Convite por email OU por username#tag (se vier Username, é esse que conta).</summary>
+public sealed record InviteRequest(string? Email, string? Username = null);
 
 /// <summary>Definições do lobby: cada campo é opcional (só muda o que vier preenchido).</summary>
 public sealed record UpdateTeamSettingsRequest(bool? ClosedToRequests, bool? MembersCanInvite);
@@ -133,9 +136,10 @@ public sealed record TeamTournamentDto(
     int TeamsConfirmed, int MaxTeams);
 
 /// <summary>Paid só é preenchido para os membros da equipa (null para quem vê de fora).</summary>
-public sealed record MemberDto(Guid UserId, string DisplayName, string? Position, bool IsHost, bool IsMe, bool? Paid);
+public sealed record MemberDto(
+    Guid UserId, string DisplayName, string Username, string? Position, bool IsHost, bool IsMe, bool? Paid);
 
-public sealed record PendingDto(Guid Id, Guid UserId, string DisplayName, DateTime CreatedAt);
+public sealed record PendingDto(Guid Id, Guid UserId, string DisplayName, string Username, DateTime CreatedAt);
 
 public sealed record TeamMeDto(
     bool IsMember,

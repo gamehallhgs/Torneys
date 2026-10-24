@@ -3,11 +3,17 @@
 #       .\scripts\dev.ps1 down | reset | logs | test | setup
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "up", "down", "reset", "logs", "test", "seed", "seed-remove", "pay-sim", "help")]
+    [ValidateSet("setup", "up", "down", "reset", "logs", "test", "seed", "seed-remove", "pay-sim", "invite-sim", "help")]
     [string]$Command = "help",
 
     [Parameter(Position = 1)]
-    [string]$Team = ""
+    [string]$Team = "",
+
+    [Parameter(Position = 2)]
+    [string]$Email = "",
+
+    [Parameter(Position = 3)]
+    [string]$Tournament = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,7 +51,11 @@ switch ($Command) {
         if (-not $Team) { Write-Host 'Uso: .\scripts\dev.ps1 pay-sim "Nome da equipa"'; exit 1 }
         Get-Content "backend\seed\dev_mark_paid.sql" -Raw -Encoding UTF8 | docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v "team=$Team"
     }
+    "invite-sim" {
+        if (-not $Team -or -not $Email) { Write-Host 'Uso: .\scripts\dev.ps1 invite-sim "Nome da equipa" eu@exemplo.pt "parte do nome do torneio"'; exit 1 }
+        Get-Content "backend\seed\dev_invite.sql" -Raw -Encoding UTF8 | docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v "team=$Team" -v "email=$Email" -v "tournament=$Tournament"
+    }
     default {
-        Write-Host "Comandos: setup | up | down | reset | logs | test | seed | seed-remove | pay-sim"
+        Write-Host "Comandos: setup | up | down | reset | logs | test | seed | seed-remove | pay-sim | invite-sim"
     }
 }

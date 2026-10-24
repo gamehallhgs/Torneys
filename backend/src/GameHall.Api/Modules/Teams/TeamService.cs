@@ -1,6 +1,7 @@
 using GameHall.Api.Common;
 using GameHall.Api.Infrastructure.Email;
 using GameHall.Api.Modules.Auth;
+using GameHall.Api.Modules.Notifications;
 using GameHall.Api.Modules.Tournaments;
 using Npgsql;
 
@@ -26,6 +27,12 @@ internal static class TeamErrors
     public static readonly ApiError AgeTooYoung = new(403, "age_too_young", "Não cumpres a idade mínima deste torneio.");
     public static readonly ApiError AgeTooOld = new(403, "age_too_old", "Excedes a idade máxima deste torneio.");
     public static readonly ApiError TournamentFull = new(409, "tournament_full", "O torneio já tem todas as equipas confirmadas.");
+    public static readonly ApiError UserNotFound = new(404, "user_not_found", "Este utilizador não se encontra na app.");
+    public static readonly ApiError TooManyFailedLookups = new(
+        429, "too_many_failed_lookups", "Demasiadas tentativas falhadas a procurar jogadores. Tenta novamente daqui a uma hora.");
+    public static readonly ApiError CannotInviteSelf = new(409, "cannot_invite_self", "Não te podes convidar a ti próprio.");
+    public static ApiError InviteeAlreadyInTeam(string displayName) => new(
+        409, "invitee_already_in_team", $"O jogador {displayName} já se encontra numa equipa do mesmo torneio.");
     public static readonly ApiError LobbyClosed = new(409, "lobby_closed", "O líder fechou este lobby: só se entra por convite.");
     public static readonly ApiError InviteNotAllowed = new(403, "invite_not_allowed", "Nesta equipa só o líder pode convidar.");
     public static readonly ApiError TeamConfirmed = new(409, "team_confirmed", "A equipa já está confirmada e fechada.");
@@ -48,6 +55,7 @@ internal static class TeamErrors
 public sealed class TeamService(
     TeamStore store,
     AuthStore users,
+    UsernameStore usernames,
     IEmailSender email,
     TimeProvider clock,
     ILogger<TeamService> log)
@@ -159,14 +167,14 @@ public sealed class TeamService(
         if (isHost)
         {
             requests = (await TeamStore.PendingRequestsAsync(c, teamId))
-                .Select(r => new PendingDto(r.Id, r.UserId, r.DisplayName, r.CreatedAt)).ToList();
+                .Select(r => new PendingDto(r.Id, r.UserId, r.DisplayName, r.Username, r.CreatedAt)).ToList();
             invites = (await TeamStore.PendingInvitesAsync(c, teamId))
-                .Select(r => new PendingDto(r.Id, r.UserId, r.DisplayName, r.CreatedAt)).ToList();
+                .Select(r => new PendingDto(r.Id, r.UserId, r.DisplayName, r.Username, r.CreatedAt)).ToList();
         }
 
         // Quem participa no torneio pode ver os membros e as posições de qualquer equipa; os pagamentos só os membros.
         IReadOnlyList<MemberDto> memberDtos = members.Select(m => new MemberDto(
-            m.UserId, m.DisplayName, m.Position, m.UserId == team.HostUserId, m.UserId == userId,
+            m.UserId, m.DisplayName, m.Username, m.Position, m.UserId == team.HostUserId, m.UserId == userId,
             isMember ? m.Paid : null)).ToList();
 
         return Outcome<TeamLobbyDto>.Ok(new TeamLobbyDto(
@@ -347,18 +355,79 @@ public sealed class TeamService(
 
     // ======================= Convites =======================
 
-    /// <summary>
-    /// Convida um utilizador pelo email. A resposta é igual exista a conta ou não (não revela quem está registado).
-    /// </summary>
-    public async Task<ApiError?> InviteAsync(Guid inviterId, Guid teamId, string? emailInput, CancellationToken ct)
+    /// <summary>Verificação rápida (fora da transação) de que este utilizador pode convidar nesta equipa.</summary>
+    private async Task<ApiError?> WhyCannotInviteAsync(Guid inviterId, Guid teamId, CancellationToken ct)
     {
-        var normalized = AuthValidation.NormalizeEmail(emailInput);
-        if (normalized is null || !normalized.Contains('@'))
+        await using var c = await store.OpenAsync(ct);
+        var team = await TeamStore.TeamAsync(c, null, teamId, false);
+        if (team is null)
         {
-            return ApiError.Validation(new Dictionary<string, string[]> { ["email"] = ["Email inválido."] });
+            return TeamErrors.TeamNotFound;
         }
 
-        var invitee = await users.FindUserByEmailAsync(normalized, ct);
+        var isMember = team.HostUserId == inviterId ||
+            await TeamStore.MyTeamIdAsync(c, null, team.TournamentId, inviterId) == teamId;
+        if (!isMember)
+        {
+            return TeamErrors.NotMember;
+        }
+
+        return TeamRules.CanInvite(team.HostUserId == inviterId, true, team.MembersCanInvite)
+            ? null
+            : TeamErrors.InviteNotAllowed;
+    }
+
+    /// <summary>
+    /// Convida um utilizador pelo email ou por username#tag.
+    /// Email: a resposta é igual exista a conta ou não (o email é privado, não revela quem está registado).
+    /// Username#tag: se não existir devolve <c>user_not_found</c> (o par exato é difícil de adivinhar: 1000 tags por
+    /// username e no máximo 10 tentativas falhadas por hora).
+    /// </summary>
+    public async Task<ApiError?> InviteAsync(
+        Guid inviterId, Guid teamId, string? emailInput, string? usernameInput, CancellationToken ct)
+    {
+        User? invitee;
+        if (!string.IsNullOrWhiteSpace(usernameInput))
+        {
+            var handle = UsernameRules.ParseHandle(usernameInput);
+            if (handle is null)
+            {
+                return ApiError.Validation(new Dictionary<string, string[]>
+                {
+                    ["username"] = ["Escreve o username com a tag, por exemplo hugo#482."]
+                });
+            }
+
+            // Só quem pode mesmo convidar nesta equipa pesquisa utilizadores (evita usar isto para sondar a base).
+            var denied = await WhyCannotInviteAsync(inviterId, teamId, ct);
+            if (denied is not null)
+            {
+                return denied;
+            }
+
+            if (await usernames.CountFailuresAsync(inviterId, Now, ct) >= UsernameRules.MaxFailedLookupsPerHour)
+            {
+                return TeamErrors.TooManyFailedLookups;
+            }
+
+            invitee = await usernames.FindByHandleAsync(handle.Value.Username, handle.Value.Tag, ct);
+            if (invitee is null)
+            {
+                await usernames.RecordFailureAsync(inviterId, Now, ct);
+                return TeamErrors.UserNotFound;
+            }
+        }
+        else
+        {
+            var normalized = AuthValidation.NormalizeEmail(emailInput);
+            if (normalized is null || !normalized.Contains('@'))
+            {
+                return ApiError.Validation(new Dictionary<string, string[]> { ["email"] = ["Email inválido."] });
+            }
+
+            invitee = await users.FindUserByEmailAsync(normalized, ct);
+        }
+
         var inviter = await users.FindUserByIdAsync(inviterId, ct);
         var inserted = false;
         TeamInfoRow? teamInfo = null;
@@ -393,6 +462,12 @@ public sealed class TeamService(
                 return TeamErrors.TeamConfirmed;
             }
 
+            // Convidar-se a si próprio nunca é possível.
+            if (invitee is not null && invitee.Id == inviterId)
+            {
+                return TeamErrors.CannotInviteSelf;
+            }
+
             if (await TeamStore.CountMembersAsync(c, tx, teamId) >= team.MaxPlayersPerTeam)
             {
                 return TeamErrors.TeamFull;
@@ -403,15 +478,28 @@ public sealed class TeamService(
                 return TeamErrors.TooManyInvites;
             }
 
-            // Conta inexistente, não verificada, o próprio líder ou já numa equipa: resposta igual, sem convite.
-            if (invitee is null || invitee.EmailVerifiedAt is null || invitee.Id == inviterId ||
-                await TeamStore.MyTeamIdAsync(c, tx, team.TournamentId, invitee.Id) is not null)
+            // Conta inexistente ou por verificar: resposta igual à de sucesso, sem convite (não revela quem tem conta).
+            if (invitee is null || invitee.EmailVerifiedAt is null)
             {
                 return null;
             }
 
+            // Já está numa equipa deste torneio: avisamos quem convida. Só revela o que já é visível nos lobbys
+            // (os membros de qualquer equipa do torneio são públicos para quem participa).
+            if (await TeamStore.MyTeamIdAsync(c, tx, team.TournamentId, invitee.Id) is not null)
+            {
+                return TeamErrors.InviteeAlreadyInTeam(invitee.DisplayName);
+            }
+
+            var inviteId = Guid.NewGuid();
             inserted = await TeamStore.InsertInviteAsync(
-                c, tx, Guid.NewGuid(), teamId, team.TournamentId, invitee.Id, inviterId) == 1;
+                c, tx, inviteId, teamId, team.TournamentId, invitee.Id, inviterId) == 1;
+            if (inserted)
+            {
+                // Notificação na app (central de notificações), na mesma transação do convite.
+                await NotificationStore.InsertTeamInviteAsync(c, tx, invitee.Id, inviteId);
+            }
+
             teamInfo = team;
             return null;
         }, ct);

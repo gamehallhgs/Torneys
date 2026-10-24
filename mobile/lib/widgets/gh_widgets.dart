@@ -221,6 +221,9 @@ class GhTextField extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.enabled = true,
+    this.onChanged,
+    this.helperText,
+    this.prefixText,
   });
 
   final TextEditingController controller;
@@ -236,6 +239,9 @@ class GhTextField extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final bool enabled;
+  final ValueChanged<String>? onChanged;
+  final String? helperText;
+  final String? prefixText;
 
   @override
   Widget build(BuildContext context) {
@@ -256,6 +262,7 @@ class GhTextField extends StatelessWidget {
         textInputAction: textInputAction,
         maxLength: maxLength,
         onFieldSubmitted: onSubmitted,
+        onChanged: onChanged,
         readOnly: readOnly,
         onTap: onTap,
         enabled: enabled,
@@ -268,6 +275,11 @@ class GhTextField extends StatelessWidget {
           filled: true,
           fillColor: GhColors.fieldFill,
           suffixIcon: suffix,
+          helperText: helperText,
+          helperMaxLines: 3,
+          helperStyle: const TextStyle(color: Colors.white60),
+          prefixText: prefixText,
+          prefixStyle: const TextStyle(color: Colors.white70),
           labelStyle: const TextStyle(color: Colors.white70),
           errorStyle: const TextStyle(color: GhColors.error),
           enabledBorder: border(GhColors.fieldBorder),

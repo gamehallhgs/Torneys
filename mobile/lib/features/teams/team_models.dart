@@ -63,19 +63,27 @@ class TeamMember {
     required this.isHost,
     required this.isMe,
     this.paid,
+    this.username = '',
   });
 
   final String userId;
   final String displayName;
+
+  /// @username (sem a tag, que é privada).
+  final String username;
   final String? position;
   final bool isHost;
   final bool isMe;
   /// null = não sabes (só os membros da equipa veem os pagamentos).
   final bool? paid;
 
+  /// "Nome (@username)" (só o nome se não houver username).
+  String get label => username.isEmpty ? displayName : '$displayName (@$username)';
+
   factory TeamMember.fromJson(Map<String, dynamic> j) => TeamMember(
         userId: j['userId'].toString(),
         displayName: (j['displayName'] ?? '').toString(),
+        username: (j['username'] ?? '').toString(),
         position: j['position'] as String?,
         isHost: j['isHost'] == true,
         isMe: j['isMe'] == true,
@@ -89,16 +97,22 @@ class PendingItem {
     required this.id,
     required this.userId,
     required this.displayName,
+    this.username = '',
   });
 
   final String id;
   final String userId;
   final String displayName;
+  final String username;
+
+  /// "Nome (@username)" (só o nome se não houver username).
+  String get label => username.isEmpty ? displayName : '$displayName (@$username)';
 
   factory PendingItem.fromJson(Map<String, dynamic> j) => PendingItem(
         id: j['id'].toString(),
         userId: j['userId'].toString(),
         displayName: (j['displayName'] ?? '').toString(),
+        username: (j['username'] ?? '').toString(),
       );
 }
 

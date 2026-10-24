@@ -19,6 +19,7 @@ namespace GameHall.Api.Modules.Auth;
 /// </summary>
 public sealed class AuthService(
     AuthStore store,
+    UsernameStore usernames,
     PasswordHasher hasher,
     PwnedPasswordChecker pwned,
     TokenService tokens,
@@ -52,6 +53,13 @@ public sealed class AuthService(
         if (!AuthValidation.IsValidDisplayName(displayName))
         {
             errors["displayName"] = ["O nome deve ter entre 2 e 40 caracteres."];
+        }
+
+        var username = UsernameRules.Normalize(req.Username);
+        var usernameProblem = UsernameRules.Validate(username);
+        if (usernameProblem is not null)
+        {
+            errors["username"] = [usernameProblem];
         }
 
         var birthDate = default(DateOnly);
@@ -103,6 +111,18 @@ public sealed class AuthService(
             });
         }
 
+        // O username tem de estar livre (os usernames não são segredo; ao contrário do email, podemos dizê-lo).
+        var availability = await usernames.CheckAsync(username, null, now, ct);
+        if (availability != UsernameAvailability.Available)
+        {
+            return ApiError.Validation(new Dictionary<string, string[]>
+            {
+                ["username"] = [availability == UsernameAvailability.Taken
+                    ? "Este username já está em uso."
+                    : "Este username foi usado há pouco tempo e está reservado."]
+            });
+        }
+
         // O hash é calculado sempre (mesmo que o email exista) para o tempo de resposta ser igual.
         var passwordHash = hasher.Hash(req.Password!);
 
@@ -120,6 +140,8 @@ public sealed class AuthService(
             Email = emailNorm!,
             PasswordHash = passwordHash,
             DisplayName = displayName,
+            Username = username,
+            UsernameTag = UsernameRules.NewTag(),
             BirthDate = birthDate,
             Role = UserRole.Player,
             CreatedAt = now,
@@ -133,7 +155,16 @@ public sealed class AuthService(
         };
 
         var ipHash = IpHash(ip);
-        if (!await store.InsertUserAsync(user, consents, ipHash, now, ct))
+        var inserted = await store.InsertUserAsync(user, consents, ipHash, now, ct);
+        if (inserted == InsertUserResult.UsernameTaken)
+        {
+            return ApiError.Validation(new Dictionary<string, string[]>
+            {
+                ["username"] = ["Este username já está em uso."]
+            });
+        }
+
+        if (inserted == InsertUserResult.EmailTaken)
         {
             return null; // pedido concorrente com o mesmo email: tratado como "já existe"
         }
@@ -515,7 +546,9 @@ public sealed class AuthService(
     }
 
     public static UserDto ToDto(User user) =>
-        new(user.Id, user.Email, user.DisplayName, user.Role.ToString(), user.EmailVerifiedAt is not null, user.BirthDate);
+        new(user.Id, user.Email, user.DisplayName, user.Role.ToString(), user.EmailVerifiedAt is not null, user.BirthDate,
+            user.Username, user.UsernameTag,
+            UsernameRules.NextChangeAt(user.UsernameChangedAt, DateTime.UtcNow));
 
     private async Task SendCodeAsync(User user, EmailCodePurpose purpose, CancellationToken ct)
     {

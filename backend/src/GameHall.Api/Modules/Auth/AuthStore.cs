@@ -3,6 +3,13 @@ using Npgsql;
 
 namespace GameHall.Api.Modules.Auth;
 
+public enum InsertUserResult
+{
+    Created,
+    EmailTaken,
+    UsernameTaken
+}
+
 /// <summary>Acesso à base de dados (SQL explícito com Dapper). Nenhuma regra de negócio aqui.</summary>
 public sealed class AuthStore(NpgsqlDataSource db)
 {
@@ -24,8 +31,8 @@ public sealed class AuthStore(NpgsqlDataSource db)
             new { Id = id }, cancellationToken: ct));
     }
 
-    /// <summary>Cria o utilizador e os consentimentos iniciais. Devolve false se o email já existir.</summary>
-    public async Task<bool> InsertUserAsync(
+    /// <summary>Cria o utilizador e os consentimentos iniciais. Diz se o email ou o username já existiam.</summary>
+    public async Task<InsertUserResult> InsertUserAsync(
         User user, IEnumerable<ConsentInsert> consents, string ipHash, DateTime now, CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -34,8 +41,8 @@ public sealed class AuthStore(NpgsqlDataSource db)
         {
             await conn.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO users (id, email, password_hash, display_name, birth_date, role, created_at, updated_at)
-                VALUES (@Id, @Email, @PasswordHash, @DisplayName, @BirthDate, @Role, @CreatedAt, @UpdatedAt)
+                INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, role, created_at, updated_at)
+                VALUES (@Id, @Email, @PasswordHash, @DisplayName, @Username, @UsernameTag, @BirthDate, @Role, @CreatedAt, @UpdatedAt)
                 """,
                 new
                 {
@@ -43,6 +50,8 @@ public sealed class AuthStore(NpgsqlDataSource db)
                     user.Email,
                     user.PasswordHash,
                     user.DisplayName,
+                    user.Username,
+                    user.UsernameTag,
                     user.BirthDate,
                     Role = (int)user.Role,
                     user.CreatedAt,
@@ -56,11 +65,11 @@ public sealed class AuthStore(NpgsqlDataSource db)
             }
 
             await tx.CommitAsync(ct);
-            return true;
+            return InsertUserResult.Created;
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            return false;
+            return ex.ConstraintName == "ux_users_username" ? InsertUserResult.UsernameTaken : InsertUserResult.EmailTaken;
         }
     }
 
@@ -105,11 +114,23 @@ public sealed class AuthStore(NpgsqlDataSource db)
             """
             UPDATE users
             SET email = @Email, display_name = 'Utilizador removido', password_hash = '!',
+                username = @Username, username_tag = '000', username_changed_at = NULL,
                 birth_date = DATE '1900-01-01', email_verified_at = NULL, failed_login_count = 0,
                 locked_until = NULL, deleted_at = @Now, updated_at = @Now
             WHERE id = @UserId
             """,
-            new { UserId = userId, Email = $"deleted-{userId:N}@deleted.invalid", Now = now }, tx, cancellationToken: ct));
+            new
+            {
+                UserId = userId,
+                Email = $"deleted-{userId:N}@deleted.invalid",
+                Username = $"removido_{userId.ToString("N")[..11]}",
+                Now = now
+            }, tx, cancellationToken: ct));
+
+        // O username liberta-se de imediato (e o histórico dele apaga-se).
+        await conn.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM username_history WHERE user_id = @UserId",
+            new { UserId = userId }, tx, cancellationToken: ct));
 
         await conn.ExecuteAsync(new CommandDefinition(
             "DELETE FROM email_codes WHERE user_id = @UserId",

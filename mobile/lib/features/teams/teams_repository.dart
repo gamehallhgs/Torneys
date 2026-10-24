@@ -40,8 +40,11 @@ class TeamsRepository {
   }
 
   Future<void> requestJoin(String teamId) => _act('/api/v1/teams/$teamId/join-requests');
-  Future<void> invite(String teamId, String email) =>
-      _act('/api/v1/teams/$teamId/invites', {'email': email});
+  /// Convida por email OU por username#tag (se vier [username], é esse que conta).
+  Future<void> invite(String teamId, {String? email, String? username}) => _act(
+        '/api/v1/teams/$teamId/invites',
+        {if (username != null) 'username': username else 'email': email},
+      );
   Future<void> setPosition(String teamId, String position) =>
       _act('/api/v1/teams/$teamId/position', {'position': position});
   Future<void> transferHost(String teamId, String userId) =>

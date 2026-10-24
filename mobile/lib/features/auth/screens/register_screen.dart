@@ -6,6 +6,7 @@ import '../../../core/error_messages.dart';
 import '../../../core/models.dart';
 import '../../../core/validators.dart';
 import '../../../widgets/gh_widgets.dart';
+import '../../profile/username_check.dart';
 import 'legal_viewer_screen.dart';
 import 'verify_email_screen.dart';
 
@@ -19,6 +20,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _username = TextEditingController();
   final _email = TextEditingController();
   final _birth = TextEditingController();
   final _password = TextEditingController();
@@ -46,6 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _name.dispose();
+    _username.dispose();
     _email.dispose();
     _birth.dispose();
     _password.dispose();
@@ -122,6 +125,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: _email.text,
         password: _password.text,
         displayName: _name.text,
+        username: Validators.normalizeUsername(_username.text),
         birthDateApi: Validators.formatDateApi(_birthDate!),
         legal: legal,
       );
@@ -170,11 +174,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               GhTextField(
                 controller: _name,
-                label: 'Nome de utilizador',
+                label: 'Nome',
                 textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.nickname],
+                autofillHints: const [AutofillHints.name],
                 maxLength: 40,
+                helperText: 'É o nome que os outros jogadores veem.',
                 validator: Validators.displayName,
+              ),
+              UsernameField(
+                controller: _username,
+                label: 'Username (único)',
+                check: usernameCheckerFor(AuthScope.of(context).api),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 14, left: 4),
+                child: Text(
+                  'Serve para te convidarem para equipas. Só letras minúsculas, números, "." e "_" (3 a 20). '
+                  'Recebes também uma tag de 3 algarismos (ex.: #482) que não muda.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
               ),
               GhTextField(
                 controller: _email,
