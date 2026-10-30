@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
@@ -293,8 +295,11 @@ class GhTextField extends StatelessWidget {
   }
 }
 
-/// Mensagem de erro ou de sucesso por cima dos formulários.
-class GhBanner extends StatelessWidget {
+/// Quanto tempo as mensagens de erro/sucesso ficam visíveis.
+const ghBannerDuration = Duration(seconds: 10);
+
+/// Mensagem de erro ou de sucesso por cima dos formulários. Desaparece sozinha ao fim de 10 segundos.
+class GhBanner extends StatefulWidget {
   const GhBanner.error(this.message, {super.key}) : success = false;
   const GhBanner.success(this.message, {super.key}) : success = true;
 
@@ -302,8 +307,49 @@ class GhBanner extends StatelessWidget {
   final bool success;
 
   @override
+  State<GhBanner> createState() => _GhBannerState();
+}
+
+class _GhBannerState extends State<GhBanner> {
+  Timer? _timer;
+  var _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  @override
+  void didUpdateWidget(GhBanner old) {
+    super.didUpdateWidget(old);
+    if (old.message != widget.message || old.success != widget.success) {
+      _visible = true;
+      _start();
+    }
+  }
+
+  void _start() {
+    _timer?.cancel();
+    _timer = Timer(ghBannerDuration, () {
+      if (mounted) {
+        setState(() => _visible = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final color = success ? GhColors.success : GhColors.error;
+    if (!_visible) {
+      return const SizedBox.shrink();
+    }
+    final color = widget.success ? GhColors.success : GhColors.error;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
@@ -312,7 +358,7 @@ class GhBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.6)),
       ),
-      child: Text(message, style: TextStyle(color: color)),
+      child: Text(widget.message, style: TextStyle(color: color)),
     );
   }
 }

@@ -16,7 +16,7 @@ Map<String, dynamic> lobbyJson({
         'colorHex': '#E53935',
         'isDemo': false,
         'confirmed': false,
-        'closedToRequests': closed,
+        'isPrivate': closed,
         'membersCanInvite': membersInvite,
       },
       'tournament': {
@@ -40,23 +40,23 @@ Map<String, dynamic> lobbyJson({
         'isMember': isMember,
         'isHost': isHost,
         'canRequestToJoin': false,
-        'joinBlockedReason': 'lobby_closed',
+        'joinBlockedReason': 'lobby_private',
         'canInvite': canInvite,
       },
     };
 
 void main() {
-  test('lê as definições do lobby e a permissão de convidar', () {
+  test('lê as definições da equipa e a permissão de convidar', () {
     final l = TeamLobby.fromJson(lobbyJson(closed: true, membersInvite: true, canInvite: true));
-    expect(l.closedToRequests, isTrue);
+    expect(l.isPrivate, isTrue);
     expect(l.membersCanInvite, isTrue);
     expect(l.canInvite, isTrue);
-    expect(l.joinBlockedReason, 'lobby_closed');
+    expect(l.joinBlockedReason, 'lobby_private');
   });
 
-  test('por defeito o lobby está aberto e só o líder convida', () {
+  test('por defeito a equipa é aberta e só o líder convida', () {
     final l = TeamLobby.fromJson(lobbyJson(isHost: false, canInvite: false));
-    expect(l.closedToRequests, isFalse);
+    expect(l.isPrivate, isFalse);
     expect(l.membersCanInvite, isFalse);
     expect(l.canInvite, isFalse);
   });
@@ -74,7 +74,7 @@ void main() {
     expect(l.unpaidCount, 2);
   });
 
-  test('mensagem para lobby fechado', () {
-    expect(TeamLabels.joinBlocked('lobby_closed'), contains('convite'));
+  test('mensagem para equipa privada', () {
+    expect(TeamLabels.joinBlocked('lobby_private'), contains('convite'));
   });
 }

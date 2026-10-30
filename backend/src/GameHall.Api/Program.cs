@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
+using GameHall.Api;
 using GameHall.Api.Common;
 using GameHall.Api.Database;
 using GameHall.Api.Infrastructure.Email;
+using GameHall.Api.Infrastructure.Push;
 using GameHall.Api.Infrastructure.Security;
 using GameHall.Api.Modules.Auth;
 using GameHall.Api.Modules.Legal;
@@ -26,6 +28,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 builder.Services.Configure<SecurityOptions>(builder.Configuration.GetSection(SecurityOptions.Section));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.Section));
+builder.Services.Configure<PushOptions>(builder.Configuration.GetSection(PushOptions.Section));
 builder.Services.Configure<LegalOptions>(builder.Configuration.GetSection(LegalOptions.Section));
 
 var jwt = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
@@ -66,20 +69,23 @@ builder.Services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(con
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddTransient<Migrator>();
-builder.Services.AddSingleton<AuthStore>();
-builder.Services.AddSingleton<TournamentStore>();
-builder.Services.AddSingleton<GameStore>();
-builder.Services.AddSingleton<TeamStore>();
-builder.Services.AddSingleton<NotificationStore>();
-builder.Services.AddSingleton<UsernameStore>();
-builder.Services.AddScoped<TeamService>();
-builder.Services.AddSingleton<TeamConfirmationService>();
-builder.Services.AddHostedService<RegistrationLifecycleService>();
-builder.Services.AddSingleton<PasswordHasher>();
-builder.Services.AddSingleton<TokenService>();
-builder.Services.AddSingleton<LegalDocuments>();
-builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
-builder.Services.AddScoped<AuthService>();
+builder.Services
+    .AddAuthModule()
+    .AddLegalModule()
+    .AddTournamentsModule()
+    .AddGamesModule()
+    .AddVotingModule()
+    .AddTeamsModule()
+    .AddNotificationsModule();
+
+if (string.Equals(builder.Configuration["Push:Provider"], "fcm", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IPushSender, FcmPushSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IPushSender, LoggingPushSender>();
+}
 
 builder.Services.AddHttpClient<PwnedPasswordChecker>(c =>
 {
@@ -238,15 +244,7 @@ app.MapGet("/health/ready", async (NpgsqlDataSource db, CancellationToken ct) =>
     return Results.Ok(new { status = "ready" });
 }).AllowAnonymous();
 
-app.MapLegalEndpoints();
-app.MapAuthEndpoints();
-app.MapMeEndpoints();
-app.MapUsernameEndpoints();
-app.MapTournamentEndpoints();
-app.MapGameEndpoints();
-app.MapGeoEndpoints();
-app.MapTeamEndpoints();
-app.MapNotificationEndpoints();
+app.MapModules();
 
 app.Run();
 

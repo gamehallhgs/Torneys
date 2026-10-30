@@ -35,6 +35,10 @@
 `Player` (utilizador), `Referee` (árbitro), `Manager` (gestor), `Admin`.
 Fica guardado em `users.role`. Mais tarde, a função **por entidade** (gestor da associação X; árbitro com permissões só para marcadores ou só para highlights) será uma tabela de permissões própria: o gestor de uma entidade delega permissões a perfis.
 
+## Módulos
+
+Uma pasta por módulo em `backend/src/GameHall.Api/Modules/`. O registo (serviços, tarefas em segundo plano, rotas) está em `ModuleRegistration.cs`: para criar um módulo novo (gestor, árbitro, pagamentos...) acrescenta-se um `AddXModule` e as suas rotas. Capacidades futuras de gestores, árbitros e admins: `docs/PAPEIS_E_PERMISSOES.md`.
+
 ## Legal por desenho
 
 - Termos e Privacidade versionados (`Legal:TermsVersion`, `Legal:PrivacyVersion`).

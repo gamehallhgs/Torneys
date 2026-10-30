@@ -26,9 +26,9 @@ public static partial class TeamRules
 
     /// <summary>Mensagem de erro, ou null se o nome (já normalizado) for válido: 3 a 30 caracteres.</summary>
     public static string? ValidateName(string name) =>
-        NameShape().IsMatch(name)
-            ? null
-            : "O nome deve ter entre 3 e 30 caracteres (letras, números, espaços e . ' & -).";
+        !NameShape().IsMatch(name)
+            ? "O nome deve ter entre 3 e 30 caracteres (letras, números, espaços e . ' & -)."
+            : GameHall.Api.Common.ProfanityFilter.Contains(name) ? GameHall.Api.Common.ProfanityFilter.Message : null;
 
     /// <summary>"#e53935" -> "#E53935"; null se não for uma cor #RRGGBB.</summary>
     public static string? NormalizeColor(string? raw) =>
@@ -47,7 +47,8 @@ public static partial class TeamRules
     public static string? JoinBlockedReason(
         bool teamHasHost, bool isMember, string tournamentStatus, bool inOtherTeamOfTournament,
         int minAge, int? maxAge, int userAge, int membersCount, int maxPlayers, bool hasPendingRequest,
-        bool teamConfirmed = false, bool lobbyClosed = false)
+        bool teamConfirmed = false, bool isPrivate = false, bool teamClosed = false, bool isPenalized = false,
+        string tournamentGender = "mixed", string? userGender = null)
     {
         if (!teamHasHost)
         {
@@ -64,15 +65,26 @@ public static partial class TeamRules
             return "registration_closed";
         }
 
-        // Equipa confirmada = fechada (já tem todos os jogadores e todos pagaram).
+        // Equipa confirmada (todos pagaram) ou fechada pelo líder (à espera de vaga ou a pagar): ninguém entra.
         if (teamConfirmed)
         {
             return "team_confirmed";
         }
 
+        if (teamClosed)
+        {
+            return "team_closed";
+        }
+
         if (inOtherTeamOfTournament)
         {
             return "already_in_team";
+        }
+
+        // Não pagou a tempo: durante a penalização não entra em nenhuma equipa deste torneio.
+        if (isPenalized)
+        {
+            return "player_penalized";
         }
 
         if (userAge < minAge)
@@ -85,15 +97,20 @@ public static partial class TeamRules
             return "age_too_old";
         }
 
+        if (!Auth.Genders.Allowed(tournamentGender, userGender))
+        {
+            return "gender_not_allowed";
+        }
+
         if (membersCount >= maxPlayers)
         {
             return "team_full";
         }
 
-        // O líder fechou o lobby a pedidos: só entra quem for convidado.
-        if (lobbyClosed)
+        // Equipa privada (o líder não aceita pedidos): só entra quem for convidado.
+        if (isPrivate)
         {
-            return "lobby_closed";
+            return "lobby_private";
         }
 
         return hasPendingRequest ? "request_pending" : null;

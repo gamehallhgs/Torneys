@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../widgets/gh_widgets.dart';
 import '../../widgets/load_view.dart';
+import '../teams/lineup_screen.dart';
 import 'game_models.dart';
 import 'game_widgets.dart';
 import 'games_repository.dart';
@@ -112,6 +113,13 @@ class GameDetailScreen extends StatelessWidget {
           for (final e in d.events) _EventRow(event: e, isHome: e.teamId == g.home.id),
         ],
       ),
+      if (d.homeSquad != null || d.awaySquad != null)
+        _Section(
+          title: 'Plantéis',
+          children: [
+            _SquadSwitcher(home: g.home, away: g.away, homeSquad: d.homeSquad, awaySquad: d.awaySquad),
+          ],
+        ),
       _Section(
         title: 'Vídeos de destaque',
         children: [
@@ -239,6 +247,118 @@ class _EventRow extends StatelessWidget {
               ? [minuteText, _icon(), const SizedBox(width: 10), Flexible(child: text)]
               : [Flexible(child: text), const SizedBox(width: 10), _icon(), minuteText],
         ),
+      ),
+    );
+  }
+}
+
+/// Os dois plantéis no mesmo espaço: escolhe-se a equipa e mostra-se só o plantel dela.
+class _SquadSwitcher extends StatefulWidget {
+  const _SquadSwitcher({required this.home, required this.away, this.homeSquad, this.awaySquad});
+
+  final GameTeam home;
+  final GameTeam away;
+  final Squad? homeSquad;
+  final Squad? awaySquad;
+
+  @override
+  State<_SquadSwitcher> createState() => _SquadSwitcherState();
+}
+
+class _SquadSwitcherState extends State<_SquadSwitcher> {
+  var _showAway = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = <(GameTeam, Squad, bool)>[
+      if (widget.homeSquad != null) (widget.home, widget.homeSquad!, false),
+      if (widget.awaySquad != null) (widget.away, widget.awaySquad!, true),
+    ];
+    final selected = options.firstWhere((o) => o.$3 == _showAway, orElse: () => options.first);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (options.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final o in options)
+                  ChoiceChip(
+                    avatar: CircleAvatar(backgroundColor: o.$1.color, radius: 7),
+                    label: Text(o.$1.label),
+                    selected: o.$3 == selected.$3,
+                    onSelected: (_) => setState(() => _showAway = o.$3),
+                  ),
+              ],
+            ),
+          ),
+        _SquadView(key: ValueKey(selected.$3), team: selected.$1, squad: selected.$2),
+      ],
+    );
+  }
+}
+
+/// Plantel de uma equipa: campo com a formação e suplentes.
+class _SquadView extends StatelessWidget {
+  const _SquadView({super.key, required this.team, required this.squad});
+
+  final GameTeam team;
+  final Squad squad;
+
+  @override
+  Widget build(BuildContext context) {
+    final bench = squad.bench;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            squad.isFormal ? '${team.label} · ${squad.formation}' : team.label,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (!squad.isFormal) ...[
+            // Sem plantel formalizado: lista dos membros da equipa, do guarda-redes ao avançado.
+            const Text('Membros da equipa (plantel por definir)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 4),
+            for (final p in squad.players)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      child: Text(p.position ?? '?', style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.w700)),
+                    ),
+                    Expanded(child: Text(p.displayName)),
+                  ],
+                ),
+              ),
+          ] else
+            Pitch(
+              formation: squad.formation,
+              color: team.color,
+              nameAt: (slot) => squad.atSlot(slot)?.displayName,
+              positionAt: (slot) => squad.atSlot(slot)?.position,
+            ),
+          if (squad.isFormal && bench.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Suplentes', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final p in bench)
+                  Chip(label: Text(p.position == null ? p.displayName : '${p.displayName} · ${p.position}')),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

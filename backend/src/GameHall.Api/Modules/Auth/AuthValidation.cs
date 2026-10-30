@@ -49,4 +49,10 @@ public static class AuthValidation
 
     public static bool IsValidDisplayName(string name) =>
         name.Length is >= 2 and <= 40 && !name.Any(char.IsControl);
+
+    /// <summary>Mensagem de erro do nome que aparece (em português) ou null se estiver bem.</summary>
+    public static string? DisplayNameProblem(string name) =>
+        !IsValidDisplayName(name)
+            ? "O nome deve ter entre 2 e 40 caracteres."
+            : GameHall.Api.Common.ProfanityFilter.Contains(name) ? GameHall.Api.Common.ProfanityFilter.Message : null;
 }

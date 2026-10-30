@@ -92,7 +92,14 @@ VALUES
    'Pavilhão GameHall Sul', NULL,
    2000, 13, NULL, 8, 7, 12, true);
 
+-- Torneios terminados: guardam quando terminaram e a janela de abertura de votações (já fechada há muito).
+UPDATE tournaments SET finished_at = (ends_on + 1)::timestamptz - interval '3 hours', voting_window_hours = 6
+WHERE is_demo AND status = 'finished';
+
 -- Distrito e concelho (valores válidos de Modules/Geo/PortugalGeo.cs) para testar o filtro por localidade.
+-- Géneros de demonstração (por omissão os torneios são mistos; os utilizadores demo são masculinos).
+UPDATE tournaments SET gender = 'male' WHERE is_demo AND name = 'Taça GameHall 7 - Outono';
+
 UPDATE tournaments t
 SET district = v.district, municipality = v.municipality
 FROM (VALUES
@@ -159,7 +166,7 @@ WHERE tm.is_demo;
 CREATE TEMP TABLE _du ON COMMIT DROP AS
 SELECT g AS idx, gen_random_uuid() AS id FROM generate_series(1, 300) g;
 
-INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, role,
+INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, gender, role,
                    email_verified_at, created_at, updated_at, is_demo)
 SELECT du.id,
        'demo.' || lpad(du.idx::text, 3, '0') || '@gamehall.demo',
@@ -171,6 +178,7 @@ SELECT du.id,
        CASE WHEN du.idx <= 264
             THEN date '1990-01-01' + ((du.idx * 37) % 5000)      -- adultos (~19 a 36 anos)
             ELSE date '2010-01-01' + ((du.idx * 17) % 700) END,  -- jovens (14-16 anos)
+       'male',  -- os nomes de demonstração são masculinos
        0, now(), now(), now(), true
 FROM _du du
 CROSS JOIN LATERAL (SELECT
@@ -183,7 +191,7 @@ CROSS JOIN LATERAL (SELECT
 -- Sem linha no plano: a equipa tem o mínimo de jogadores e todos pagaram.
 CREATE TEMP TABLE _plan (tname text, n int, members int, paid int) ON COMMIT DROP;
 INSERT INTO _plan VALUES
-  -- Taça GameHall 7 (mín. 9, máx. 14): confirmada / lobby cheio e confirmado / lobby cheio por pagar / completa por pagar / abaixo do mínimo
+  -- Taça GameHall 7 (mín. 9, máx. 14): confirmada / lobby cheio e confirmado / lobby cheio a pagar (vaga reservada) / completa a pagar / em formação (abaixo do mínimo)
   ('Taça GameHall 7 - Outono', 1,  9,  9),
   ('Taça GameHall 7 - Outono', 2, 14, 14),
   ('Taça GameHall 7 - Outono', 3, 14, 11),
@@ -227,23 +235,43 @@ FROM (SELECT DISTINCT ON (team_id) team_id, user_id
       FROM team_members ORDER BY team_id, joined_at, user_id) h
 WHERE t.id = h.team_id AND t.is_demo;
 
--- Equipa CONFIRMADA = mínimo de jogadores + todos pagaram (mesma regra da API).
+-- Estados das equipas demo (mesma regra da API):
+--   fechada, vaga reservada a pagar = mínimo de jogadores e alguns já pagaram (prazo de 30 min a partir de agora;
+--                                     as reservas demo nunca expiram sozinhas, volta a correr "make seed" para renovar);
+--   confirmada                      = mínimo de jogadores e todos pagaram;
+--   em formação                     = as restantes (sem pagamentos; alguns jogadores já "preparados").
 UPDATE teams t
-SET confirmed_at = now()
+SET closed_at = now() - interval '10 minutes',
+    reserved_at = now() - interval '10 minutes',
+    reservation_expires_at = now() + interval '30 minutes',
+    payment_mode = 'split',
+    share_cents = (SELECT (tr.entry_fee_cents + c.n - 1) / c.n
+                   FROM (SELECT count(*)::int AS n FROM team_members m WHERE m.team_id = t.id) c),
+    confirmed_at = CASE
+        WHEN (SELECT count(*) FROM team_members m WHERE m.team_id = t.id AND m.paid_at IS NULL) = 0
+        THEN now() - interval '5 minutes' END
 FROM tournaments tr
 WHERE t.is_demo AND tr.id = t.tournament_id
   AND (SELECT count(*) FROM team_members m WHERE m.team_id = t.id) >= tr.min_players_per_team
-  AND (SELECT count(*) FROM team_members m WHERE m.team_id = t.id AND m.paid_at IS NULL) = 0;
+  AND (SELECT count(*) FROM team_members m WHERE m.team_id = t.id AND m.paid_at IS NOT NULL) > 0;
 
--- Definições do lobby (casos de teste): lobby fechado a pedidos e/ou membros que também convidam.
+UPDATE team_members m SET paid_at = NULL
+FROM teams t WHERE t.id = m.team_id AND t.is_demo AND t.closed_at IS NULL;
+
+UPDATE team_members m SET ready = true
+FROM teams t
+WHERE t.id = m.team_id AND t.is_demo
+  AND (t.closed_at IS NOT NULL OR abs(hashtext(m.user_id::text)) % 3 <> 0);
+
+-- Definições do lobby (casos de teste): equipa privada (sem pedidos de entrada) e/ou membros que também convidam.
 UPDATE teams t
-SET closed_to_requests = v.closed, members_can_invite = v.members
+SET is_private = v.private, members_can_invite = v.members
 FROM tournaments tr, (VALUES
-  ('Taça GameHall 7 - Outono', 'Dragões Urbanos', true,  false),  -- fechado: só por convite
-  ('Taça GameHall 7 - Outono', 'Tubarões FC',     false, true),   -- aberto e os membros convidam
-  ('Torneio Futsal Jovem',     'Leões do Norte',  true,  true),   -- fechado e os membros convidam
-  ('Liga Fut11 Lisboa',        'Furacão Atlético', true, false)   -- confirmada e fechada a pedidos
-) AS v(tournament, team, closed, members)
+  ('Taça GameHall 7 - Outono', 'Dragões Urbanos', true,  false),  -- privada: só por convite
+  ('Taça GameHall 7 - Outono', 'Tubarões FC',     false, true),   -- aberta e os membros convidam
+  ('Torneio Futsal Jovem',     'Leões do Norte',  true,  true),   -- privada e os membros convidam
+  ('Liga Fut11 Lisboa',        'Furacão Atlético', true, false)   -- confirmada e privada
+) AS v(tournament, team, private, members)
 WHERE t.is_demo AND tr.id = t.tournament_id AND tr.name = v.tournament AND t.name = v.team;
 
 -- ---------------------------------------------------------------------------------------------
@@ -416,9 +444,25 @@ WHERE x.rn <= 2;
 
 COMMIT;
 
+-- Plantel por defeito das equipas de demonstração (formação da modalidade; os primeiros jogadores são titulares).
+UPDATE teams t
+SET formation = CASE tr.sport WHEN 'football7' THEN '2-3-1' WHEN 'football9' THEN '3-3-2'
+                              WHEN 'football11' THEN '4-4-2' ELSE '1-2-1' END
+FROM tournaments tr
+WHERE tr.id = t.tournament_id AND t.is_demo;
+
+UPDATE team_members m
+SET slot = r.rn - 1
+FROM (SELECT team_id, user_id, row_number() OVER (PARTITION BY team_id ORDER BY joined_at, user_id) AS rn
+      FROM team_members) r,
+     teams t, tournaments tr
+WHERE m.team_id = r.team_id AND m.user_id = r.user_id AND t.id = m.team_id AND tr.id = t.tournament_id
+  AND t.is_demo
+  AND r.rn <= CASE tr.sport WHEN 'football7' THEN 7 WHEN 'football9' THEN 9 WHEN 'football11' THEN 11 ELSE 5 END;
+
 SELECT status, count(*) AS torneios FROM tournaments WHERE is_demo GROUP BY status ORDER BY status;
 SELECT g.status, count(*) AS jogos FROM games g JOIN tournaments t ON t.id = g.tournament_id WHERE t.is_demo GROUP BY g.status ORDER BY g.status;
-SELECT tr.name AS torneio, tr.max_teams AS vagas, count(*) AS equipas, count(t.confirmed_at) AS confirmadas
+SELECT tr.name AS torneio, tr.max_teams AS vagas, count(*) AS equipas, count(t.confirmed_at) AS confirmadas, count(t.reserved_at) AS vagas_ocupadas
 FROM tournaments tr JOIN teams t ON t.tournament_id = tr.id
 WHERE tr.is_demo AND tr.status = 'registration_open' GROUP BY tr.id ORDER BY tr.name;
 

@@ -13,11 +13,35 @@ public static class GameEndpoints
     private static readonly ApiError TournamentNotFound =
         new(StatusCodes.Status404NotFound, "tournament_not_found", "Torneio não encontrado.");
 
+    private static async Task<SquadDto?> SquadOfAsync(GameStore games, Guid teamId, CancellationToken ct)
+    {
+        var rows = await games.DefaultSquadAsync(teamId, ct);
+        return rows.Count == 0 ? null : SquadRules.Build(rows);
+    }
+
     private static readonly ApiError GameNotFound =
         new(StatusCodes.Status404NotFound, "game_not_found", "Jogo não encontrado.");
 
     public static void MapGameEndpoints(this IEndpointRouteBuilder app)
     {
+        // Página do torneio a decorrer: o próximo jogo e, se o utilizador jogar, o próximo jogo dele.
+        app.MapGet("/api/v1/tournaments/{tournamentId:guid}/next-games", async (
+            Guid tournamentId, HttpContext ctx, TournamentStore tournaments, GameStore games, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (await tournaments.FindAsync(tournamentId, ct) is null)
+            {
+                return TournamentNotFound.ToResult();
+            }
+
+            var (next, mine) = await games.NextGamesAsync(tournamentId, uid, ct);
+            return Results.Ok(new NextGamesDto(next is null ? null : ToDto(next), mine is null ? null : ToDto(mine)));
+        });
+
         app.MapGet("/api/v1/tournaments/{tournamentId:guid}/games", async (
             Guid tournamentId, string? status, TournamentStore tournaments, GameStore games, CancellationToken ct) =>
         {
@@ -48,12 +72,16 @@ public static class GameEndpoints
 
             var events = await games.EventsAsync(gameId, ct);
             var highlights = await games.HighlightsAsync(gameId, ct);
+            var home = row.HomeTeamId is { } h ? await SquadOfAsync(games, h, ct) : null;
+            var away = row.AwayTeamId is { } a ? await SquadOfAsync(games, a, ct) : null;
             return Results.Ok(new GameDetailDto(
                 ToDto(row),
                 row.TournamentId,
                 row.TournamentName,
                 events.Select(e => new GameEventDto(e.Id, e.TeamId, e.PlayerName, e.Type, e.Minute)).ToList(),
-                highlights.Select(h => new HighlightDto(h.Id, h.Url, h.Title, h.DurationSeconds)).ToList()));
+                highlights.Select(x => new HighlightDto(x.Id, x.Url, x.Title, x.DurationSeconds)).ToList(),
+                home,
+                away));
         });
 
         app.MapGet("/api/v1/tournaments/{tournamentId:guid}/standings", async (

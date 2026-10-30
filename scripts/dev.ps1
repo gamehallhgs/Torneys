@@ -3,7 +3,7 @@
 #       .\scripts\dev.ps1 down | reset | logs | test | setup
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "up", "down", "reset", "logs", "test", "seed", "seed-remove", "pay-sim", "invite-sim", "help")]
+    [ValidateSet("setup", "up", "down", "reset", "logs", "test", "test-integration", "seed", "seed-remove", "pay-sim", "invite-sim", "team-sim", "help")]
     [string]$Command = "help",
 
     [Parameter(Position = 1)]
@@ -13,7 +13,10 @@ param(
     [string]$Email = "",
 
     [Parameter(Position = 3)]
-    [string]$Tournament = ""
+    [string]$Tournament = "",
+
+    [Parameter(Position = 4)]
+    [string]$Action = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,6 +41,14 @@ switch ($Command) {
     "down"  { docker compose down }
     "reset" { docker compose down -v }
     "logs"  { docker compose logs -f api }
+    "test-integration" {
+        docker network create gh-test 2>$null
+        docker rm -f gh-test-pg 2>$null
+        docker run -d --rm --name gh-test-pg --network gh-test -e POSTGRES_PASSWORD=test postgres:16 | Out-Null
+        do { Start-Sleep -Seconds 1; docker exec gh-test-pg pg_isready -U postgres 2>$null | Out-Null } while ($LASTEXITCODE -ne 0)
+        docker run --rm --network gh-test -e "GAMEHALL_TEST_PG=Host=gh-test-pg;Username=postgres;Password=test;Database=postgres" -v "${root}\backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet test tests/GameHall.Api.IntegrationTests
+        docker rm -f gh-test-pg 2>$null | Out-Null
+    }
     "test"  {
         docker run --rm -v "${root}\backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet test
     }
@@ -55,7 +66,11 @@ switch ($Command) {
         if (-not $Team -or -not $Email) { Write-Host 'Uso: .\scripts\dev.ps1 invite-sim "Nome da equipa" eu@exemplo.pt "parte do nome do torneio"'; exit 1 }
         Get-Content "backend\seed\dev_invite.sql" -Raw -Encoding UTF8 | docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v "team=$Team" -v "email=$Email" -v "tournament=$Tournament"
     }
+    "team-sim" {
+        if (-not $Action) { Write-Host 'Uso: .\scripts\dev.ps1 team-sim "Nome da equipa" "" "parte do nome do torneio" ready|expire|release|full|status'; exit 1 }
+        Get-Content "backend\seed\dev_team_sim.sql" -Raw -Encoding UTF8 | docker compose exec -T postgres psql -U gamehall -d gamehall -v ON_ERROR_STOP=1 -v "action=$Action" -v "team=$Team" -v "tournament=$Tournament"
+    }
     default {
-        Write-Host "Comandos: setup | up | down | reset | logs | test | seed | seed-remove | pay-sim | invite-sim"
+        Write-Host "Comandos: setup | up | down | reset | logs | test | test-integration | seed | seed-remove | pay-sim | invite-sim | team-sim"
     }
 }

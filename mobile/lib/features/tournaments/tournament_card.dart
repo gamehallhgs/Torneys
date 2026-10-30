@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
+import '../../core/genders.dart';
 import '../../core/theme.dart';
 import 'tournament_models.dart';
 
@@ -46,7 +47,7 @@ class TournamentCard extends StatelessWidget {
                         StatusChip(status: t.status),
                         if (t.showFullFlag) ...[
                           const SizedBox(height: 6),
-                          const FullFlag(),
+                          FullFlag(soldOut: t.isSoldOut),
                         ],
                       ],
                     ),
@@ -65,8 +66,14 @@ class TournamentCard extends StatelessWidget {
                     _Tag(TournamentLabels.sport(t.sport)),
                     _Tag(TournamentLabels.format(t.format)),
                     _Tag('${t.ageLabel} anos'),
+                    _Tag(Genders.tournamentLabel(t.gender)),
                   ],
                 ),
+                if (t.status == 'registration_open' &&
+                    TournamentLabels.countdown(t.registrationClosesAt) != null) ...[
+                  const SizedBox(height: 10),
+                  _Line(Icons.timer_outlined, TournamentLabels.countdown(t.registrationClosesAt)!, color: Colors.amber),
+                ],
                 const SizedBox(height: 12),
                 _Line(Icons.calendar_today, Fmt.dateRange(t.startsOn, t.endsOn)),
                 _Line(Icons.place_outlined, t.placeLine),
@@ -84,24 +91,28 @@ class TournamentCard extends StatelessWidget {
   }
 }
 
-/// Etiqueta laranja "Cheio": todas as vagas têm equipas confirmadas.
+/// Etiqueta das vagas: **Lotado** (laranja) = todas as vagas confirmadas; **Reservado** (azul) = todas
+/// reservadas ou confirmadas mas nem todas confirmadas (se uma reserva falhar, abre vaga).
 class FullFlag extends StatelessWidget {
-  const FullFlag({super.key});
+  const FullFlag({super.key, this.soldOut = true});
+
+  final bool soldOut;
 
   @override
   Widget build(BuildContext context) {
+    final color = soldOut ? GhColors.full : Colors.lightBlueAccent;
     return Semantics(
-      label: 'Torneio cheio',
+      label: soldOut ? 'Torneio lotado' : 'Vagas reservadas',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: GhColors.full.withValues(alpha: 0.2),
+          color: color.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: GhColors.full),
+          border: Border.all(color: color),
         ),
-        child: const Text(
-          'Cheio',
-          style: TextStyle(color: GhColors.full, fontSize: 12, fontWeight: FontWeight.w800),
+        child: Text(
+          soldOut ? 'Lotado' : 'Reservado',
+          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -155,10 +166,11 @@ class _Tag extends StatelessWidget {
 }
 
 class _Line extends StatelessWidget {
-  const _Line(this.icon, this.text);
+  const _Line(this.icon, this.text, {this.color});
 
   final IconData icon;
   final String text;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -166,9 +178,11 @@ class _Line extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: Colors.white70),
+          Icon(icon, size: 16, color: color ?? Colors.white70),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 14, color: color, fontWeight: color == null ? null : FontWeight.w700)),
+          ),
         ],
       ),
     );

@@ -21,7 +21,7 @@ void main() {
     test('joinBlocked devolve mensagem para cada motivo', () {
       for (final r in [
         'team_not_joinable', 'already_member', 'registration_closed', 'already_in_team',
-        'age_too_young', 'age_too_old', 'team_full', 'team_confirmed', 'request_pending', 'lobby_closed',
+        'age_too_young', 'age_too_old', 'team_full', 'team_confirmed', 'request_pending', 'lobby_private', 'team_closed',
       ]) {
         expect(TeamLabels.joinBlocked(r), isNot('Não podes entrar nesta equipa.'));
       }

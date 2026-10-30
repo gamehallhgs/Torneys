@@ -33,11 +33,57 @@ public sealed class GameStore(NpgsqlDataSource db)
             new { T = tournamentId, Status = status }, cancellationToken: ct))).ToList();
     }
 
+    /// <summary>
+    /// Próximo jogo do torneio (a decorrer primeiro, depois o mais cedo por jogar) e, se [userId] jogar no torneio,
+    /// o próximo jogo da equipa dele. Jogos adiados/cancelados e sem data ficam de fora.
+    /// </summary>
+    public async Task<(GameRow? Next, GameRow? Mine)> NextGamesAsync(Guid tournamentId, Guid userId, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        const string order = "ORDER BY (g.status = 'running') DESC, g.scheduled_at, g.round_number, g.match_number LIMIT 1";
+        var next = await conn.QueryFirstOrDefaultAsync<GameRow>(new CommandDefinition(
+            $"""
+            {GameSelect}
+            WHERE g.tournament_id = @T AND g.status IN ('scheduled', 'running') AND g.scheduled_at IS NOT NULL
+            {order}
+            """,
+            new { T = tournamentId }, cancellationToken: ct));
+        var mine = await conn.QueryFirstOrDefaultAsync<GameRow>(new CommandDefinition(
+            $"""
+            {GameSelect}
+            WHERE g.tournament_id = @T AND g.status IN ('scheduled', 'running') AND g.scheduled_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM team_members m WHERE m.user_id = @U AND m.team_id IN (g.home_team_id, g.away_team_id))
+            {order}
+            """,
+            new { T = tournamentId, U = userId }, cancellationToken: ct));
+        return (next, mine);
+    }
+
     public async Task<GameRow?> FindGameAsync(Guid gameId, CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         return await conn.QuerySingleOrDefaultAsync<GameRow>(new CommandDefinition(
             $"{GameSelect} WHERE g.id = @Id", new { Id = gameId }, cancellationToken: ct));
+    }
+
+    /// <summary>
+    /// Plantel por defeito da equipa (titulares por lugar, depois suplentes). Ponto único a mudar quando
+    /// existirem plantéis por jogo.
+    /// </summary>
+    public async Task<IReadOnlyList<SquadRow>> DefaultSquadAsync(Guid teamId, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        return (await conn.QueryAsync<SquadRow>(new CommandDefinition(
+            """
+            SELECT u.display_name, m.position, m.slot, t.formation, tr.sport
+            FROM team_members m
+            JOIN users u ON u.id = m.user_id
+            JOIN teams t ON t.id = m.team_id
+            JOIN tournaments tr ON tr.id = t.tournament_id
+            WHERE m.team_id = @T
+            ORDER BY (m.slot IS NULL), m.slot, m.joined_at
+            """,
+            new { T = teamId }, cancellationToken: ct))).ToList();
     }
 
     public async Task<IReadOnlyList<EventRow>> EventsAsync(Guid gameId, CancellationToken ct)

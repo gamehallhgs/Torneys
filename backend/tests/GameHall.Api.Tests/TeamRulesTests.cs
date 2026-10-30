@@ -110,3 +110,43 @@ public class TeamRulesTests
         Assert.Null(TournamentRules.WhyCannotParticipate("registration_open", 18, null, 18));
     }
 }
+
+public class GenderRulesTests
+{
+    [Theory]
+    [InlineData("mixed", "male", true)]
+    [InlineData("mixed", "other", true)]
+    [InlineData("male", "male", true)]
+    [InlineData("male", "female", false)]
+    [InlineData("female", "female", true)]
+    [InlineData("female", "non_binary", false)]
+    [InlineData("non_binary", "non_binary", true)]
+    [InlineData("other", "male", false)]
+    public void Allowed_matches_category(string tournament, string user, bool expected) =>
+        Assert.Equal(expected, GameHall.Api.Modules.Auth.Genders.Allowed(tournament, user));
+
+    [Fact]
+    public void Participation_is_blocked_for_other_genders()
+    {
+        Assert.Equal(
+            "gender_not_allowed",
+            GameHall.Api.Modules.Tournaments.TournamentRules.WhyCannotParticipate(
+                "registration_open", 13, null, 20, "female", "male"));
+        Assert.Null(
+            GameHall.Api.Modules.Tournaments.TournamentRules.WhyCannotParticipate(
+                "registration_open", 13, null, 20, "mixed", "male"));
+        Assert.Equal(
+            "gender_not_allowed",
+            TeamRules.JoinBlockedReason(
+                true, false, "registration_open", false, 13, null, 20, 5, 14, false,
+                tournamentGender: "male", userGender: "female"));
+    }
+
+    [Fact]
+    public void Only_valid_user_genders()
+    {
+        Assert.True(GameHall.Api.Modules.Auth.Genders.IsValidUser("non_binary"));
+        Assert.False(GameHall.Api.Modules.Auth.Genders.IsValidUser("mixed"));
+        Assert.False(GameHall.Api.Modules.Auth.Genders.IsValidUser(null));
+    }
+}

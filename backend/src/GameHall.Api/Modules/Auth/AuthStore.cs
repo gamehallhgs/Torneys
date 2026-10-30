@@ -41,8 +41,8 @@ public sealed class AuthStore(NpgsqlDataSource db)
         {
             await conn.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, role, created_at, updated_at)
-                VALUES (@Id, @Email, @PasswordHash, @DisplayName, @Username, @UsernameTag, @BirthDate, @Role, @CreatedAt, @UpdatedAt)
+                INSERT INTO users (id, email, password_hash, display_name, username, username_tag, birth_date, gender, role, created_at, updated_at)
+                VALUES (@Id, @Email, @PasswordHash, @DisplayName, @Username, @UsernameTag, @BirthDate, @Gender, @Role, @CreatedAt, @UpdatedAt)
                 """,
                 new
                 {
@@ -53,6 +53,7 @@ public sealed class AuthStore(NpgsqlDataSource db)
                     user.Username,
                     user.UsernameTag,
                     user.BirthDate,
+                    user.Gender,
                     Role = (int)user.Role,
                     user.CreatedAt,
                     user.UpdatedAt
@@ -364,6 +365,55 @@ public sealed class AuthStore(NpgsqlDataSource db)
                 Now = now
             },
             tx, cancellationToken: ct));
+
+    /// <summary>Muda o nome que aparece (sem limite de mudanças). Devolve false se a conta não existe.</summary>
+    public async Task<bool> UpdateDisplayNameAsync(Guid userId, string displayName, DateTime now, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        return await conn.ExecuteAsync(new CommandDefinition(
+            "UPDATE users SET display_name = @Name, updated_at = @Now WHERE id = @UserId AND deleted_at IS NULL",
+            new { UserId = userId, Name = displayName, Now = now }, cancellationToken: ct)) == 1;
+    }
+
+    /// <summary>Marca o mini-guia de boas-vindas como visto (só a primeira vez conta).</summary>
+    public async Task MarkOnboardingSeenAsync(Guid userId, DateTime now, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            "UPDATE users SET onboarding_seen_at = COALESCE(onboarding_seen_at, @Now) WHERE id = @UserId AND deleted_at IS NULL",
+            new { UserId = userId, Now = now }, cancellationToken: ct));
+    }
+
+    // ---------- Push ----------
+
+    public async Task SetPushEnabledAsync(Guid userId, bool enabled, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            "UPDATE users SET push_enabled = @Enabled WHERE id = @UserId AND deleted_at IS NULL",
+            new { UserId = userId, Enabled = enabled }, cancellationToken: ct));
+    }
+
+    /// <summary>Regista (ou passa para este utilizador) o token do telemóvel. Um token só pertence a uma conta.</summary>
+    public async Task UpsertDeviceTokenAsync(Guid userId, string token, string platform, DateTime now, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO device_tokens (id, user_id, token, platform, created_at, last_seen_at)
+            VALUES (@Id, @UserId, @Token, @Platform, @Now, @Now)
+            ON CONFLICT (token) DO UPDATE SET user_id = @UserId, platform = @Platform, last_seen_at = @Now
+            """,
+            new { Id = Guid.NewGuid(), UserId = userId, Token = token, Platform = platform, Now = now }, cancellationToken: ct));
+    }
+
+    public async Task DeleteDeviceTokenAsync(Guid userId, string token, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM device_tokens WHERE user_id = @UserId AND token = @Token",
+            new { UserId = userId, Token = token }, cancellationToken: ct));
+    }
 
     // ---------- Auditoria ----------
 

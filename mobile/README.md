@@ -121,13 +121,21 @@ Windows: `.\scripts\dev.ps1 seed` e `.\scripts\dev.ps1 seed-remove`. Podes corre
 - Se já geraste a pasta `android/` antes: para **versões de produção** o manifesto precisa de `<uses-permission android:name="android.permission.INTERNET" />` (o `tool/setup.sh`/`setup.ps1` já o acrescenta em projetos novos; em debug não é preciso).
 - Tudo é só leitura: marcar resultados, cartões e vídeos é trabalho dos painéis do gestor e do árbitro (ainda por fazer).
 
-## Equipas confirmadas e etiqueta "Cheio"
+## Fechar a equipa, reservar vaga e pagar (fase 9)
 
-- Qualquer pessoa pode criar equipas (sem limite). Uma equipa só fica **confirmada** quando tem o mínimo de jogadores e todos pagaram; ficam no torneio as primeiras N confirmadas e as restantes são eliminadas quando as vagas esgotam.
-- Os cartões mostram "x/N equipas confirmadas · y em formação". Nos torneios com inscrições abertas e todas as vagas confirmadas aparece a etiqueta laranja **Cheio**.
-- O lobby mostra se a equipa está confirmada ou o que falta (jogadores e pagamentos). Uma equipa confirmada fica fechada.
-- Os pagamentos ainda não existem na app: para testar, `make pay-sim TEAM="Nome da equipa"` simula o pagamento e a equipa fica confirmada no minuto seguinte.
-- Com `make seed` há um torneio cheio (*Copa Futsal Esgotada*), outro quase cheio (*Liga Fut11 Lisboa*) e dois com equipas ainda por confirmar.
+Vocabulário: equipa **privada** = não aceita pedidos de entrada; equipa **fechada** = pronta para pagamento (ninguém entra nem sai).
+
+1. **Preparado:** cada jogador (menos o líder) liga "Estou preparado" no lobby. O líder vê quem já está.
+2. **Fechar:** com o mínimo de jogadores e todos preparados, o líder escolhe **pagamento dividido** (cada um paga a sua parte, arredondada para cima: a app avisa se a equipa paga a mais) ou **total** (o líder paga tudo) e fecha a equipa. Pode reabri-la ou eliminá-la enquanto a vaga não estiver confirmada.
+3. **Vaga:** havendo vaga livre, fica reservada **30 minutos** (contador no lobby). Sem vaga, a equipa entra numa **fila** por ordem de chegada e a app mostra a posição.
+4. **Pagar:** o botão **Pagar (simulado)** regista o pagamento (ainda não se cobra nada). Quando todos pagaram, a vaga fica confirmada e a equipa já não pode desistir.
+5. **Prazo falhado:** a equipa volta à formação, os pagamentos são libertados sem custos e quem não pagou fica **15 minutos penalizado** (a sua equipa não pode fechar). Os outros ficam livres de sair ou de o líder remover o penalizado.
+
+- Os cartões mostram "x/N equipas confirmadas · y em formação". Nos torneios com inscrições abertas: etiqueta laranja **Lotado** quando todas as vagas estão confirmadas; etiqueta azul **Reservado** quando todas estão reservadas ou confirmadas mas nem todas confirmadas (se uma reserva falhar, abre vaga). Em ambos os casos ainda se pode criar equipa e ficar na fila; só no **Lotado** já não.
+- O lobby atualiza sozinho de 15 em 15 s enquanto a equipa está na fila ou a pagar.
+- **Penalização:** quem não pagou a tempo não pode criar equipa, pedir para entrar nem aceitar convites em nenhuma equipa desse torneio durante 15 minutos (continua na sua equipa, se lá estiver).
+- Testes: `make team-sim ACTION=ready TEAM="Nome"` (todos preparados), `ACTION=expire` (expira a reserva), `ACTION=release` (liberta uma vaga), `ACTION=full TORNEIO="Outono"` (torneio com todas as vagas reservadas: aparece **Reservado** e testa-se a fila), `ACTION=status`; `make pay-sim TEAM="Nome"` paga por todos. A API processa as reservas de 15 em 15 s.
+- Com `make seed` há um torneio cheio (*Copa Futsal Esgotada*), outro quase cheio (*Liga Fut11 Lisboa*) e dois com equipas fechadas a pagar e outras em formação.
 
 ## Casos de demonstração (`make seed`)
 
@@ -135,20 +143,20 @@ O seed cria **300 utilizadores demo** (`demo.NNN@gamehall.demo`, marcados `is_de
 
 | Torneio | Máx. equipas | O que mostra |
 |---|---|---|
-| Copa Futsal Esgotada | 8 | **Cheio**: 8/8 confirmadas (lobbys de 7, 10 e 12 jogadores, todos pagos) |
+| Copa Futsal Esgotada | 8 | **Lotado**: 8/8 confirmadas (lobbys de 7, 10 e 12 jogadores, todos pagos) |
 | Liga Fut11 Lisboa | 12 | **Quase cheio**: 11/12 confirmadas (1 vaga), equipas de 16 a 22 jogadores |
-| Taça GameHall 7 - Outono | 16 | 2 confirmadas (uma no mínimo, outra com lobby cheio 14/14) e 3 em formação: abaixo do mínimo (5/9, 0 pagos), completa com pagamentos em falta (9, 4 pagos) e lobby cheio com 11/14 pagos |
-| Torneio Futsal Jovem (13-17) | 12 | 1 confirmada (12/12) e 2 em formação (7 jogadores com 3 pagos; 4 jogadores sem pagamentos) |
+| Taça GameHall 7 - Outono | 16 | 2 confirmadas (uma no mínimo, outra com lobby cheio 14/14), 2 com **vaga reservada a pagar** (9 jogadores com 4 pagos; 14 com 11 pagos) e 1 em formação (5/9, alguns preparados) |
+| Torneio Futsal Jovem (13-17) | 12 | 1 confirmada (12/12), 1 com vaga reservada a pagar (7 jogadores, 3 pagos) e 1 em formação (4 jogadores) |
 
-Os torneios a decorrer, fechados e terminados têm todas as equipas confirmadas. Para confirmar uma equipa em formação: `make pay-sim TEAM="Nome da equipa"`.
+Os torneios a decorrer, fechados e terminados têm todas as equipas confirmadas. As reservas demo têm 30 minutos a partir do `make seed` e nunca expiram sozinhas (volta a correr `make seed` para renovar o contador).
 
 ## Lobby: definições, ver outras equipas e filtro por localidade
 
 - Em **qualquer equipa** podes tocar e ver os jogadores e as posições; só não podes pedir para entrar se já estás noutra equipa do mesmo torneio.
-- O líder tem **Definições do lobby** (a qualquer momento): **Lobby fechado** (não aceita pedidos de fora, só convites) e **Os membros também podem convidar** (por defeito só o líder convida).
+- O líder tem **Definições do lobby** (a qualquer momento): **Equipa privada** (não aceita pedidos de fora, só convites) e **Os membros também podem convidar** (por defeito só o líder convida).
 - Na lista de torneios há um botão **Localidade**: escolhe o distrito (18) e, se quiseres, o concelho; só aparecem os torneios dessa zona. O mesmo botão tem "Todo o país" para limpar.
 - Corrigido: no filtro de modalidades já podes voltar a **Todas as modalidades**.
-- Casos de demo: *Dragões Urbanos* (Taça Outono) tem o lobby fechado; *Tubarões FC* (Taça Outono) deixa os membros convidar; *Leões do Norte* (Futsal Jovem) tem as duas definições ligadas. Os torneios demo estão em Porto, Braga, Lisboa, Faro e Coimbra (vários concelhos).
+- Casos de demo: *Dragões Urbanos* (Taça Outono) é privada; *Tubarões FC* (Taça Outono) deixa os membros convidar; *Leões do Norte* (Futsal Jovem) tem as duas definições ligadas. Os torneios demo estão em Porto, Braga, Lisboa, Faro e Coimbra (vários concelhos).
 
 ## Notificações (sino ao lado de "Os meus torneios")
 
@@ -165,8 +173,45 @@ Ao convidar por email, o resultado aparece dentro da caixa "Convidar jogador": *
 
 - Ao **criar conta** escolhes o **nome** (como os outros te veem) e um **username** único (3 a 20 caracteres: minúsculas, números, `.` e `_`). A app diz "Disponível" ou o motivo enquanto escreves.
 - Recebes também uma **tag de 3 algarismos** (ex.: `#482`) ao acaso, que **não muda** mesmo que mudes o username. O teu identificador completo é `@hugo#482` (no Perfil, com botão para copiar). Só tu vês a tua tag.
-- **Perfil:** mostra o nome e o username (o email já não aparece). "Mudar username": 1 vez por mês; o antigo fica reservado 30 dias.
+- **Perfil:** mostra o nome e o username (o email já não aparece). "Mudar username": só 1 vez por conta (as seguintes serão pagas no futuro); o antigo fica reservado 30 dias.
 - **Convidar** (lobby): o mesmo campo aceita **email** ou **`username#tag`** (ex.: `hugo#482`). Se o username#tag não existir, o aviso vermelho diz "Este utilizador não se encontra na app."; se existir, o aviso verde diz "@hugo foi convidado para o lobby." (e a pessoa recebe a notificação). Máximo de 10 tentativas falhadas por hora e 40 convites pendentes por equipa.
 - Nos lobbys os jogadores aparecem como "Nome @username" (sem a tag).
 - Contas que já existiam receberam um username gerado a partir do nome e uma tag; podes mudá-lo logo uma vez, mesmo que seja o primeiro mês.
 - Demo: os 300 jogadores demo têm username e tag previsíveis, por exemplo `joao.silva#007`, `rui.silva#014`, `tiago.silva#021` (tag = 7 × número). Experimenta convidá-los pelo lobby de uma equipa tua.
+
+## Notificações de equipa, "Em pagamento" e nome (fase 9b)
+- Central de notificações: convites, **pedidos para entrar** (o líder aceita/recusa), **equipa fechada** (quem paga o quê), **vaga reservada** e **equipa confirmada**.
+- Estado da equipa com vaga reservada chama-se **Em pagamento** (`TeamState.label`).
+- Com a vaga confirmada o líder já não vê as definições do lobby e ninguém entra nem é convidado.
+- Perfil → **Mudar nome**: o nome visível pode mudar sempre que quiseres (`PATCH /api/v1/me/name`).
+- Depois do prazo das inscrições só ficam equipas confirmadas, em pagamento e em fila (ver `docs/API.md`).
+- Fase 10: também chegam avisos de pedido aceite/recusado, tempo a acabar (5 min), reserva expirada (com penalização) e equipa eliminada. Migração 012 (`expiry_warned_at`).
+- Fase 12 (parcial): contagem decrescente nos cartões de torneio (últimos 3 dias; escalões 3/2/1 dias, 12 h, 1 h, 30 min) e skeleton na lista de torneios (`widgets/skeleton.dart`). Por fazer: menu de filtros, ecrã inicial, sinal verde/vermelho aberta/privada.
+- Filtros: um só botão "Filtros" (modalidade, datas, localidade) com o número de filtros ativos e etiquetas removíveis; saudação "Olá, nome" no topo.
+- Lista de equipas do torneio: ponto verde (aceita pedidos) / vermelho (privada ou fechada) e estado (em formação, em fila, em pagamento).
+- Fase 13: formação estilo FIFA (campo + banco). O líder escolhe a formação e quem joga em cada lugar; todos veem (`LineupScreen`). Migração 013.
+- Género: escolhido no registo (masculino, feminino, não binário, outro). Torneios têm categoria de género (ou misto) e só entra quem corresponde.
+- Aceitar um convite nas notificações abre logo o lobby da equipa. O guarda-redes no campo foi subido e cada jogador mostra a sua posição.
+- O líder define o plantel (formação e titulares) antes de fechar a equipa; o detalhe do jogo mostra o plantel das duas equipas.
+- Plantel opcional: sem plantel formal, o jogo mostra a lista dos membros por posição (guarda-redes → avançado).
+- Notificações: deslizar para apagar e "Limpar tudo"; avisos de expulsão e de novo líder.
+- Ao fechar a equipa o líder vê o painel "Regras do torneio" (texto de exemplo); com a equipa fechada as definições do lobby desaparecem.
+- Penalizados aparecem com uma bolinha vermelha no lobby. "Os meus torneios" tem filtro Todos/Abertos/A decorrer/Terminados.
+
+
+## Código de convite e guia
+
+- `features/teams/join_by_code_screen.dart`: "Tenho um código" (ver equipa → confirmar).
+- Lobby: quadro "Código da equipa" (`TeamCode`).
+- `features/onboarding/welcome_guide_screen.dart`: mini-guia de 5 ecrãs, mostrado uma vez (`AppUser.onboardingSeen`) e em Perfil → "Ver guia".
+
+
+## Torneios terminados
+
+- `features/voting/`: modelos, repositório e widgets (`PodiumCard`, `AwardsRow`, `VotingPanel`). A página do torneio (`tournament_detail_screen.dart`) reordena as secções quando o torneio está terminado.
+
+## Push, próximo jogo e avisos (2026-10-29)
+- `lib/core/push_service.dart`: `PushService` (por defeito `NoPushService`: a app funciona sem push). Para ligar o Firebase ver `docs/NOTIFICACOES.md`.
+- Perfil: interruptor «Notificações push» (`PushSwitchTile`) → `PUT /me/push`.
+- Notificações de torneio/jogo (`voting_*`, `game_*`) abrem o torneio; página de um torneio a decorrer mostra «O meu próximo jogo» e «Próximo jogo do torneio».
+- Testes: `test/push_and_next_game_test.dart`.

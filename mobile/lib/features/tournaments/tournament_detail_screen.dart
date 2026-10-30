@@ -5,9 +5,17 @@ import '../../core/error_messages.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../widgets/gh_widgets.dart';
+import '../games/game_detail_screen.dart';
+import '../games/game_models.dart';
+import '../games/game_widgets.dart';
+import '../games/games_repository.dart';
 import '../games/tournament_hub_screen.dart';
 import '../teams/create_team_screen.dart';
 import '../teams/team_lobby_screen.dart';
+import '../teams/team_models.dart';
+import '../voting/results_widgets.dart';
+import '../voting/voting_models.dart';
+import '../voting/voting_repository.dart';
 import 'tournament_card.dart';
 import 'tournament_models.dart';
 import 'tournaments_repository.dart';
@@ -28,6 +36,9 @@ class TournamentDetailScreen extends StatefulWidget {
 
 class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
   TournamentDetail? _detail;
+  TournamentResults? _results;
+  NextGames? _next;
+  late VotingRepository _votingRepo;
   String? _error;
   bool _started = false;
 
@@ -46,16 +57,46 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
       _detail = null;
     });
     try {
-      final repo = TournamentsRepository(AuthScope.of(context).api);
-      final detail = await repo.detail(widget.tournamentId);
+      final api = AuthScope.of(context).api;
+      _votingRepo = VotingRepository(api);
+      final detail = await TournamentsRepository(api).detail(widget.tournamentId);
       if (mounted) {
         setState(() => _detail = detail);
+      }
+      if (detail.summary.status == 'finished') {
+        await _loadResults();
+      } else if (detail.summary.status == 'ongoing') {
+        await _loadNext();
       }
     } catch (e) {
       debugPrint('[GameHall] detalhe do torneio falhou: $e');
       if (mounted) {
         setState(() => _error = friendlyError(e));
       }
+    }
+  }
+
+  /// Próximo jogo (torneio a decorrer). Se falhar, a página continua sem esta secção.
+  Future<void> _loadNext() async {
+    try {
+      final n = await GamesRepository(AuthScope.of(context).api).nextGames(widget.tournamentId);
+      if (mounted) {
+        setState(() => _next = n);
+      }
+    } catch (e) {
+      debugPrint('[GameHall] próximo jogo falhou: $e');
+    }
+  }
+
+  /// Pódio, prémios e votação (só torneios terminados). Se falhar, a página continua sem estas secções.
+  Future<void> _loadResults() async {
+    try {
+      final r = await _votingRepo.results(widget.tournamentId);
+      if (mounted) {
+        setState(() => _results = r);
+      }
+    } catch (e) {
+      debugPrint('[GameHall] resultados do torneio falharam: $e');
     }
   }
 
@@ -81,6 +122,45 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     if (mounted) {
       await _load();
     }
+  }
+
+  /// Torneio terminado: Informação, Regras, Pódio, Melhor jogador/guarda-redes (ou votação), Equipas, Regulamento.
+  /// Os outros estados: Informação, Regras e Equipas.
+  List<Widget> _sectionsFor(TournamentDetail d, List<_Section> sections) {
+    if (d.summary.status == 'ongoing' && _next != null && !_next!.isEmpty) {
+      return [
+        NextGamesSection(
+          games: _next!,
+          onOpenGame: (g) => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => GameDetailScreen(gameId: g.id)),
+          ),
+        ),
+        ...sections,
+      ];
+    }
+    if (d.summary.status != 'finished') {
+      return sections;
+    }
+    final r = _results;
+    return [
+      sections[0],
+      sections[1],
+      if (r != null && r.podium.isNotEmpty) PodiumCard(podium: r.podium),
+      if (r?.voting != null)
+        VotingPanel(
+          key: ValueKey('voting_${r!.voting!.roundNumber}'),
+          tournamentId: d.summary.id,
+          voting: r.voting!,
+          repo: _votingRepo,
+          onVoted: _loadResults,
+        ),
+      if (r != null && r.hasAwards) AwardsRow(bestPlayer: r.bestPlayer, bestGoalkeeper: r.bestGoalkeeper),
+      sections[2],
+      _Section(
+        title: 'Regulamento',
+        children: [Text(d.rules, style: const TextStyle(height: 1.5, color: Colors.white70))],
+      ),
+    ];
   }
 
   @override
@@ -109,35 +189,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
 
   List<Widget> _content(TournamentDetail d) {
     final s = d.summary;
-    return [
-      if (d.myTeam != null) ...[
-        _MyTeamCard(
-          team: d.myTeam!,
-          maxPlayers: d.maxPlayersPerTeam,
-          onTap: () => _openTeam(d.myTeam!.id),
-        ),
-        const SizedBox(height: 16),
-      ],
-      Text(s.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 4),
-      Text(s.organizerName, style: const TextStyle(color: Colors.white60)),
-      const SizedBox(height: 12),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            StatusChip(status: s.status),
-            if (s.showFullFlag) const FullFlag(),
-          ],
-        ),
-      ),
-      if (d.description != null && d.description!.isNotEmpty) ...[
-        const SizedBox(height: 16),
-        Text(d.description!, style: const TextStyle(height: 1.4)),
-      ],
-      const SizedBox(height: 20),
+    final sections = <_Section>[
       _Section(
         title: 'Informação',
         children: [
@@ -216,8 +268,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                         message: 'Confirmada',
                         child: Icon(Icons.check_circle, size: 18, color: GhColors.success),
                       )
-                    else
-                      const Text('em formação', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    else ...[
+                      Text(
+                        TeamState.label(team.state).toLowerCase(),
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: team.isOpen ? 'Aceita pedidos para entrar' : 'Privada ou fechada',
+                        child: Icon(Icons.circle, size: 10, color: team.isOpen ? GhColors.success : GhColors.error),
+                      ),
+                    ],
                     const SizedBox(width: 6),
                     const Icon(Icons.chevron_right, size: 18, color: Colors.white54),
                   ],
@@ -226,6 +287,37 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
             ),
         ],
       ),
+    ];
+    return [
+      if (d.myTeam != null) ...[
+        _MyTeamCard(
+          team: d.myTeam!,
+          maxPlayers: d.maxPlayersPerTeam,
+          onTap: () => _openTeam(d.myTeam!.id),
+        ),
+        const SizedBox(height: 16),
+      ],
+      Text(s.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 4),
+      Text(s.organizerName, style: const TextStyle(color: Colors.white60)),
+      const SizedBox(height: 12),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            StatusChip(status: s.status),
+            if (s.showFullFlag) FullFlag(soldOut: s.isSoldOut),
+          ],
+        ),
+      ),
+      if (d.description != null && d.description!.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text(d.description!, style: const TextStyle(height: 1.4)),
+      ],
+      const SizedBox(height: 20),
+      ..._sectionsFor(d, sections),
       if (s.status != 'registration_open') ...[
         GhButton(
           label: 'Jogos, classificação e estatísticas',

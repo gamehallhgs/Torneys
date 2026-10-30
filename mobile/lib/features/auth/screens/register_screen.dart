@@ -4,6 +4,7 @@ import '../../../core/api_client.dart';
 import '../../../core/auth_scope.dart';
 import '../../../core/error_messages.dart';
 import '../../../core/models.dart';
+import '../../../core/genders.dart';
 import '../../../core/validators.dart';
 import '../../../widgets/gh_widgets.dart';
 import '../../profile/username_check.dart';
@@ -27,6 +28,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirm = TextEditingController();
 
   DateTime? _birthDate;
+  String? _gender;
   bool _acceptTerms = false;
   bool _acceptPrivacy = false;
   bool _showPassword = false;
@@ -127,6 +129,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         displayName: _name.text,
         username: Validators.normalizeUsername(_username.text),
         birthDateApi: Validators.formatDateApi(_birthDate!),
+        gender: _gender!,
         legal: legal,
       );
       if (!mounted) {
@@ -214,6 +217,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: EdgeInsets.only(bottom: 14, left: 4),
                 child: Text(
                   'Tem de ser a tua data real. Não pode ser alterada depois.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Género'),
+                items: [
+                  for (final g in Genders.user) DropdownMenuItem<String>(value: g.$1, child: Text(g.$2)),
+                ],
+                onChanged: (v) => setState(() => _gender = v),
+                validator: (v) => v == null ? 'Escolhe o género.' : null,
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 14, left: 4, top: 6),
+                child: Text(
+                  'Define os torneios em que podes entrar (masculinos, femininos, ...). Os torneios mistos são abertos a todos.',
                   style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
               ),

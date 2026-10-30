@@ -54,20 +54,49 @@ String friendlyError(Object error) {
     case 'too_many_invites':
       return 'Há demasiados convites pendentes. Cancela alguns primeiro.';
     case 'tournament_full':
-      return 'O torneio já tem todas as equipas confirmadas.';
+      return 'O torneio está lotado: todas as vagas estão confirmadas.';
     case 'team_confirmed':
       return 'A equipa já está confirmada e fechada: não aceita nem perde jogadores.';
     case 'cannot_invite_self':
     case 'invitee_already_in_team':
     case 'user_not_found':
     case 'too_many_failed_lookups':
+    case 'invite_code_regen_limit':
     case 'username_taken':
     case 'username_reserved':
-    case 'username_change_cooldown':
-      // A mensagem do servidor já vem em português e completa (nome do jogador, data da próxima mudança...).
+    case 'username_change_used':
+      // A mensagem do servidor já vem em português e completa.
       return error.message;
-    case 'lobby_closed':
-      return 'O líder fechou este lobby: só se entra por convite.';
+    case 'voting_closed':
+      return 'Esta votação já fechou.';
+    case 'cannot_vote_self':
+      return 'Não podes votar em ti próprio.';
+    case 'candidate_not_found':
+      return 'Esse jogador não está na votação.';
+    case 'email_not_verified_long_enough':
+      return 'Para votares sem teres participado no torneio, o teu email tem de estar verificado há mais de 1 dia.';
+    case 'invite_code_invalid':
+      return 'Código inválido ou já não está ativo. Confirma com o líder da equipa.';
+    case 'lobby_private':
+      return 'Esta equipa é privada: só se entra por convite.';
+    case 'team_closed':
+      return 'A equipa está fechada: ninguém entra nem sai. O líder pode reabri-la enquanto a vaga não estiver confirmada.';
+    case 'gender_not_allowed':
+      return 'Este torneio não está aberto ao teu género.';
+    case 'team_confirmed_locked':
+    case 'reopen_after_deadline':
+    case 'team_not_closed':
+    case 'team_in_queue':
+    case 'reservation_expired':
+    case 'only_host_pays':
+    case 'already_paid':
+    case 'below_min_players':
+    case 'members_not_ready':
+    case 'lineup_missing':
+    case 'members_penalized':
+    case 'player_penalized':
+      // Mensagens do servidor, já em português (nomes de jogadores penalizados, mínimos...).
+      return error.message;
     case 'invite_not_allowed':
       return 'Nesta equipa só o líder pode convidar.';
     case 'invalid_position':

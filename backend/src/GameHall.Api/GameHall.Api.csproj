@@ -19,6 +19,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Os testes de integração usam os erros internos (TeamErrors, VotingErrors) -->
+    <InternalsVisibleTo Include="GameHall.Api.IntegrationTests" />
+    <InternalsVisibleTo Include="GameHall.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Textos legais e migrações SQL são copiados para a pasta de saída -->
     <Content Include="Legal\**\*.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Database\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />

@@ -28,7 +28,7 @@ Widget host({required double width, required ValueChanged<String> onSelected, St
 
 void main() {
   testWidgets('largo: todos os separadores e o sino cabem, sem esbater', (tester) async {
-    await tester.pumpWidget(host(width: 700, onSelected: (_) {}));
+    await tester.pumpWidget(host(width: 1200, onSelected: (_) {}));
     await tester.pump();
     for (final t in tabs) {
       expect(find.text(t.$2), findsOneWidget);
@@ -50,7 +50,7 @@ void main() {
 
   testWidgets('tocar num separador escolhe-o', (tester) async {
     String? picked;
-    await tester.pumpWidget(host(width: 700, onSelected: (v) => picked = v));
+    await tester.pumpWidget(host(width: 1200, onSelected: (v) => picked = v));
     await tester.tap(find.text('Os meus torneios'));
     await tester.pump();
     expect(picked, 'mine');

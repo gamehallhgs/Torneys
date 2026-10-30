@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gamehall_torneios/features/notifications/notification_bell.dart';
 import 'package:gamehall_torneios/features/notifications/notification_models.dart';
 import 'package:gamehall_torneios/features/notifications/notifications_screen.dart';
+import 'package:gamehall_torneios/features/teams/team_models.dart';
 
 Map<String, dynamic> inviteJson({String status = 'pending', bool read = false}) => {
       'id': 'n1',
@@ -132,6 +133,84 @@ void main() {
       await tester.pumpWidget(card(notification(), busy: true, onAccept: () => accepted++));
       await tester.tap(find.text('Aceitar'), warnIfMissed: false);
       expect(accepted, 0);
+    });
+  });
+
+  group('pedidos e avisos de equipa', () {
+    final requestJson = {
+      'id': 'n2',
+      'type': 'join_request',
+      'createdAt': '2026-10-23T20:00:00Z',
+      'read': false,
+      'request': {
+        'requestId': 'r1',
+        'status': 'pending',
+        'teamId': 't1',
+        'teamName': 'Dragões Urbanos',
+        'colorHex': '#E53935',
+        'tournamentName': 'Taça Outono',
+        'requesterName': 'Rita',
+        'requesterUsername': 'rita',
+      },
+    };
+    final eventJson = {
+      'id': 'n3',
+      'type': 'team_confirmed',
+      'createdAt': '2026-10-23T20:00:00Z',
+      'read': true,
+      'event': {
+        'teamId': 't1',
+        'teamName': 'Dragões Urbanos',
+        'colorHex': '#E53935',
+        'tournamentName': 'Taça Outono',
+        'title': 'Equipa confirmada',
+        'message': 'Todos pagaram.',
+        'teamExists': true,
+      },
+    };
+
+    test('lê pedido e evento', () {
+      final r = AppNotification.fromJson(requestJson);
+      expect(r.request!.requesterLabel, 'Rita (@rita)');
+      expect(r.request!.isPending, isTrue);
+      final e = AppNotification.fromJson(eventJson);
+      expect(e.event!.title, 'Equipa confirmada');
+      expect(AppNotification.eventTypes.contains(e.type), isTrue);
+    });
+
+    testWidgets('cartão do pedido tem aceitar e recusar', (tester) async {
+      var accepted = false;
+      await tester.pumpWidget(host(JoinRequestNotificationCard(
+        notification: AppNotification.fromJson(requestJson),
+        busy: false,
+        onOpenTeam: () {},
+        onAccept: () => accepted = true,
+        onDecline: () {},
+      )));
+      expect(find.text('Pedido para entrar em Dragões Urbanos'), findsOneWidget);
+      await tester.tap(find.text('Aceitar'));
+      expect(accepted, isTrue);
+    });
+
+    testWidgets('cartão do evento mostra o texto', (tester) async {
+      await tester.pumpWidget(host(TeamEventNotificationCard(
+        notification: AppNotification.fromJson(eventJson),
+        onOpenTeam: () {},
+      )));
+      expect(find.text('Todos pagaram.'), findsOneWidget);
+      expect(find.text('Ver equipa'), findsOneWidget);
+    });
+  });
+
+  group('novos avisos', () {
+    test('expulso e novo líder são avisos de equipa', () {
+      expect(AppNotification.eventTypes, containsAll(['removed_from_team', 'now_leader']));
+    });
+
+    test('membro penalizado', () {
+      final m = TeamMember.fromJson({'userId': 'u', 'displayName': 'A', 'penalized': true});
+      expect(m.penalized, isTrue);
+      expect(TeamMember.fromJson({'userId': 'u', 'displayName': 'A'}).penalized, isNull);
     });
   });
 }

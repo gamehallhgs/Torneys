@@ -50,9 +50,9 @@ public sealed class AuthService(
         }
 
         var displayName = (req.DisplayName ?? "").Trim();
-        if (!AuthValidation.IsValidDisplayName(displayName))
+        if (AuthValidation.DisplayNameProblem(displayName) is { } nameProblem)
         {
-            errors["displayName"] = ["O nome deve ter entre 2 e 40 caracteres."];
+            errors["displayName"] = [nameProblem];
         }
 
         var username = UsernameRules.Normalize(req.Username);
@@ -60,6 +60,12 @@ public sealed class AuthService(
         if (usernameProblem is not null)
         {
             errors["username"] = [usernameProblem];
+        }
+
+        var gender = (req.Gender ?? "").Trim();
+        if (!Genders.IsValidUser(gender))
+        {
+            errors["gender"] = ["Escolhe o género."];
         }
 
         var birthDate = default(DateOnly);
@@ -143,6 +149,7 @@ public sealed class AuthService(
             Username = username,
             UsernameTag = UsernameRules.NewTag(),
             BirthDate = birthDate,
+            Gender = gender,
             Role = UserRole.Player,
             CreatedAt = now,
             UpdatedAt = now
@@ -548,7 +555,8 @@ public sealed class AuthService(
     public static UserDto ToDto(User user) =>
         new(user.Id, user.Email, user.DisplayName, user.Role.ToString(), user.EmailVerifiedAt is not null, user.BirthDate,
             user.Username, user.UsernameTag,
-            UsernameRules.NextChangeAt(user.UsernameChangedAt, DateTime.UtcNow));
+            UsernameRules.ChangesLeft(user.UsernameChangedAt), user.Gender,
+            user.OnboardingSeenAt is not null, user.PushEnabled);
 
     private async Task SendCodeAsync(User user, EmailCodePurpose purpose, CancellationToken ct)
     {

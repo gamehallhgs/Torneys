@@ -17,7 +17,7 @@ public static class TournamentEndpoints
         var g = app.MapGroup("/api/v1/tournaments");
 
         g.MapGet("", async (
-            string? status, DateOnly? from, DateOnly? to, string? sport, string? district, string? municipality,
+            string? status, string? scope, DateOnly? from, DateOnly? to, string? sport, string? district, string? municipality,
             int? page, int? pageSize,
             HttpContext ctx, TournamentStore store, CancellationToken ct) =>
         {
@@ -25,6 +25,11 @@ public static class TournamentEndpoints
             if (status is not null && !StatusFilters.Contains(status))
             {
                 fields["status"] = ["Estado inválido. Usa: open, ongoing, finished ou mine."];
+            }
+
+            if (scope is not null && scope is not ("open" or "ongoing" or "finished"))
+            {
+                fields["scope"] = ["Usa: open, ongoing ou finished."];
             }
 
             if (sport is not null && !TournamentRules.Sports.Contains(sport))
@@ -69,7 +74,7 @@ public static class TournamentEndpoints
             var p = Math.Max(page ?? 1, 1);
             var size = Math.Clamp(pageSize ?? 20, 1, 50);
             var (rows, total) = await store.ListAsync(
-                new TournamentFilter(status, from, to, sport, p, size, memberOf, district, municipality), ct);
+                new TournamentFilter(status, from, to, sport, p, size, memberOf, district, municipality, scope), ct);
 
             return Results.Ok(new TournamentPageDto(rows.Select(ToSummary).ToList(), total, p, size));
         });
@@ -93,7 +98,13 @@ public static class TournamentEndpoints
             var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
             var age = AgeCalculator.AgeOn(user.BirthDate, today);
             var reason = TournamentRules.WhyCannotCreateTeam(
-                row.Status, row.TeamsConfirmed, row.MaxTeams, row.MinAge, row.MaxAge, age);
+                row.Status, row.TeamsConfirmed, row.MaxTeams, row.MinAge, row.MaxAge, age, row.Gender, user.Gender);
+
+            // Penalizado por não ter pago a tempo: não entra em nenhuma equipa deste torneio durante 15 minutos.
+            if (reason is null && await store.IsPenalizedAsync(id, user.Id, clock.GetUtcNow().UtcDateTime, ct))
+            {
+                reason = "player_penalized";
+            }
 
             var teams = await store.ListTeamsAsync(id, ct);
             var myTeam = await store.FindMyTeamAsync(id, user.Id, ct);
@@ -107,12 +118,13 @@ public static class TournamentEndpoints
                 row.RegistrationOpensAt,
                 row.MinPlayersPerTeam,
                 row.MaxPlayersPerTeam,
-                teams.Select(t => new TeamDto(t.Id, t.Name, t.ColorHex, t.Confirmed)).ToList(),
+                teams.Select(t => new TeamDto(t.Id, t.Name, t.ColorHex, t.Confirmed, t.IsPrivate, t.State)).ToList(),
                 new EligibilityDto(reason is null, reason),
                 myTeam?.Id,
                 myTeam is null
                     ? null
-                    : new MyTeamBriefDto(myTeam.Id, myTeam.Name, myTeam.ColorHex, myTeam.IsHost, myTeam.MembersCount, myTeam.Confirmed)));
+                    : new MyTeamBriefDto(myTeam.Id, myTeam.Name, myTeam.ColorHex, myTeam.IsHost, myTeam.MembersCount, myTeam.Confirmed),
+                string.IsNullOrWhiteSpace(row.RulesText) ? TournamentRules.PlaceholderRules : row.RulesText));
         });
     }
 
@@ -123,5 +135,5 @@ public static class TournamentEndpoints
         r.Id, r.Name, r.OrganizerName, r.Sport, r.Format, r.Status, r.StartsOn, r.EndsOn,
         r.LocationName, r.District, r.Municipality, r.EntryFeeCents, r.TeamsRegistered, r.MaxTeams, r.MinAge, r.MaxAge,
         TournamentRules.AgeLabel(r.MinAge, r.MaxAge), r.RegistrationClosesAt,
-        r.TeamsConfirmed, r.TeamsConfirmed >= r.MaxTeams);
+        r.TeamsConfirmed, r.TeamsReserved >= r.MaxTeams, r.TeamsConfirmed >= r.MaxTeams, r.Gender);
 }

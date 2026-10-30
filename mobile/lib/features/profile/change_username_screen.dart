@@ -6,7 +6,7 @@ import '../../core/validators.dart';
 import '../../widgets/gh_widgets.dart';
 import 'username_check.dart';
 
-/// Mudar o username: 1 vez por mês (a tag mantém-se). O antigo fica reservado 30 dias.
+/// Mudar o username: só 1 vez por conta (a tag mantém-se). O antigo fica reservado 30 dias.
 class ChangeUsernameScreen extends StatefulWidget {
   const ChangeUsernameScreen({super.key});
 
@@ -56,7 +56,7 @@ class _ChangeUsernameScreenState extends State<ChangeUsernameScreen> {
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
     final user = auth.user;
-    final canChange = user?.canChangeUsername() ?? true;
+    final canChange = user?.canChangeUsername ?? true;
     return GhPage(
       title: 'Mudar username',
       children: [
@@ -67,15 +67,15 @@ class _ChangeUsernameScreenState extends State<ChangeUsernameScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Só podes mudar o username uma vez por mês. A tua tag (os 3 algarismos a seguir ao #) não muda, por isso quem a tem guardada '
-          'continua a conseguir convidar-te. O username antigo fica reservado durante 30 dias.',
+          'Só podes mudar o username uma vez. A tua tag (os 3 algarismos a seguir ao #) não muda, por isso quem a tem guardada '
+          'continua a conseguir convidar-te. O username antigo fica reservado durante 30 dias. '
+          'Mudanças seguintes serão pagas (ainda não disponível).',
           style: TextStyle(color: Colors.white70, height: 1.4),
         ),
         const SizedBox(height: 16),
         if (!canChange)
-          GhBanner.error(
-            'Já mudaste o username este mês. Podes mudar de novo a '
-            '${_fmt(user!.usernameNextChangeAt!)}.',
+          const GhBanner.error(
+            'Já usaste a tua mudança de username gratuita. Mudanças futuras serão pagas (ainda não disponível).',
           )
         else
           Form(
@@ -95,7 +95,4 @@ class _ChangeUsernameScreenState extends State<ChangeUsernameScreen> {
       ],
     );
   }
-
-  static String _fmt(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 }

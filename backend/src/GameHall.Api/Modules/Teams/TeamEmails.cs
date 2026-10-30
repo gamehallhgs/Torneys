@@ -22,4 +22,18 @@ public static class TeamEmails
 
         Abre a app GameHall Torneios, vai a "As minhas equipas" e aceita ou recusa o convite.
         """);
+
+    /// <summary>
+    /// Email de aviso a partir de uma notificação de equipa (vaga reservada, falta 5 minutos, equipa confirmada):
+    /// o mesmo texto que a pessoa vê na app.
+    /// </summary>
+    public static (string Subject, string Body) FromNotification(string playerName, string title, string teamName, string message) => (
+        $"{title}: equipa {teamName}",
+        $"""
+        Olá {playerName},
+
+        {message}
+
+        Abre a app GameHall Torneios para ver os detalhes.
+        """);
 }

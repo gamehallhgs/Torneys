@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.9.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GameHall.Api\GameHall.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- O Migrator procura as migrações ao lado do executável -->
+    <Content Include="..\..\src\GameHall.Api\Database\Migrations\*.sql"
+             Link="Database\Migrations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Os seeds de demonstração correm nos testes (têm de funcionar sempre) -->
+    <Content Include="..\..\seed\demo_tournaments.sql;..\..\seed\demo_voting.sql;..\..\seed\remove_demo.sql"
+             Link="seed\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

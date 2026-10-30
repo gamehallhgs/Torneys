@@ -155,3 +155,45 @@ class _TeamLine extends StatelessWidget {
     );
   }
 }
+
+/// Página de um torneio a decorrer: "Próximo jogo" e, se o utilizador joga, "O meu próximo jogo".
+/// Se for o mesmo jogo aparece um só cartão ("O meu próximo jogo").
+class NextGamesSection extends StatelessWidget {
+  const NextGamesSection({super.key, required this.games, required this.onOpenGame});
+
+  final NextGames games;
+  final void Function(Game game) onOpenGame;
+
+  @override
+  Widget build(BuildContext context) {
+    if (games.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (games.mine != null) ...[
+          const _NextTitle('O meu próximo jogo'),
+          GameCard(game: games.mine!, onTap: () => onOpenGame(games.mine!)),
+        ],
+        if (games.next != null && !games.sameGame) ...[
+          const _NextTitle('Próximo jogo do torneio'),
+          GameCard(game: games.next!, onTap: () => onOpenGame(games.next!)),
+        ],
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _NextTitle extends StatelessWidget {
+  const _NextTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+      );
+}

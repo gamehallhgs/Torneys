@@ -10,6 +10,7 @@ class TournamentsRepository {
 
   Future<TournamentPage> list({
     String? status,
+    String? scope,
     DateTime? from,
     DateTime? to,
     String? sport,
@@ -20,6 +21,7 @@ class TournamentsRepository {
   }) async {
     final query = <String, String>{
       if (status != null) 'status': status,
+      if (status == 'mine' && scope != null) 'scope': scope,
       if (from != null) 'from': Validators.formatDateApi(from),
       if (to != null) 'to': Validators.formatDateApi(to),
       if (sport != null) 'sport': sport,

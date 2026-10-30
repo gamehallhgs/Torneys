@@ -8,7 +8,10 @@ class AppUser {
     required this.birthDate,
     this.username = '',
     this.usernameTag = '',
-    this.usernameNextChangeAt,
+    this.usernameChangesLeft = 1,
+    this.gender = 'other',
+    this.onboardingSeen = true,
+    this.pushEnabled = true,
   });
 
   final String id;
@@ -18,30 +21,49 @@ class AppUser {
   final bool emailVerified;
   final String birthDate;
 
+  /// male, female, non_binary ou other (escolhido ao criar a conta).
+  final String gender;
+
+  /// Já viu (ou saltou) o mini-guia de boas-vindas.
+  final bool onboardingSeen;
+
+  /// Interruptor geral de notificações push (Perfil).
+  final bool pushEnabled;
+
   /// @username (único) e tag de 3 algarismos (fixa). Os outros convidam-te com "username#tag".
   final String username;
   final String usernameTag;
 
-  /// Quando voltas a poder mudar o username (null = já podes).
-  final DateTime? usernameNextChangeAt;
+  /// Mudanças de username gratuitas que ainda tens (só 1 por conta; as seguintes serão pagas no futuro).
+  final int usernameChangesLeft;
 
   /// "@hugo#482"
   String get handle => username.isEmpty ? '' : '@$username#$usernameTag';
 
   /// Pode mudar o username agora?
-  bool canChangeUsername({DateTime? now}) =>
-      usernameNextChangeAt == null || !usernameNextChangeAt!.isAfter(now ?? DateTime.now());
+  bool get canChangeUsername => usernameChangesLeft > 0;
 
-  AppUser copyWith({String? username, String? usernameTag, DateTime? usernameNextChangeAt}) => AppUser(
+  AppUser copyWith({
+    String? displayName,
+    String? username,
+    String? usernameTag,
+    int? usernameChangesLeft,
+    bool? onboardingSeen,
+    bool? pushEnabled,
+  }) =>
+      AppUser(
         id: id,
         email: email,
-        displayName: displayName,
+        displayName: displayName ?? this.displayName,
         role: role,
         emailVerified: emailVerified,
         birthDate: birthDate,
         username: username ?? this.username,
         usernameTag: usernameTag ?? this.usernameTag,
-        usernameNextChangeAt: usernameNextChangeAt,
+        usernameChangesLeft: usernameChangesLeft ?? this.usernameChangesLeft,
+        gender: gender,
+        onboardingSeen: onboardingSeen ?? this.onboardingSeen,
+        pushEnabled: pushEnabled ?? this.pushEnabled,
       );
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
@@ -51,11 +73,12 @@ class AppUser {
         role: (json['role'] ?? 'Player').toString(),
         emailVerified: json['emailVerified'] == true,
         birthDate: (json['birthDate'] ?? '').toString(),
+        gender: (json['gender'] ?? 'other').toString(),
+        onboardingSeen: json['onboardingSeen'] != false,
+        pushEnabled: json['pushEnabled'] != false,
         username: (json['username'] ?? '').toString(),
         usernameTag: (json['usernameTag'] ?? '').toString(),
-        usernameNextChangeAt: json['usernameNextChangeAt'] == null
-            ? null
-            : DateTime.tryParse(json['usernameNextChangeAt'].toString())?.toLocal(),
+        usernameChangesLeft: (json['usernameChangesLeft'] as num?)?.toInt() ?? 1,
       );
 }
 

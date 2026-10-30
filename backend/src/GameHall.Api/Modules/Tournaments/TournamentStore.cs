@@ -11,10 +11,11 @@ public sealed class TournamentStore(NpgsqlDataSource db)
         """
         t.id, t.name, t.description, t.organizer_name, t.sport, t.format, t.has_third_place, t.tiebreakers,
         t.status, t.registration_opens_at, t.registration_closes_at, t.starts_on, t.ends_on,
-        t.location_name, t.district, t.municipality, t.location_address, t.entry_fee_cents, t.min_age, t.max_age, t.max_teams,
-        t.min_players_per_team, t.max_players_per_team,
+        t.location_name, t.district, t.municipality, t.location_address, t.entry_fee_cents, t.min_age, t.max_age, t.gender, t.max_teams,
+        t.min_players_per_team, t.max_players_per_team, t.rules_text, t.finished_at, t.voting_window_hours,
         (SELECT count(*)::int FROM teams x WHERE x.tournament_id = t.id) AS teams_registered,
-        (SELECT count(*)::int FROM teams x WHERE x.tournament_id = t.id AND x.confirmed_at IS NOT NULL) AS teams_confirmed
+        (SELECT count(*)::int FROM teams x WHERE x.tournament_id = t.id AND x.confirmed_at IS NOT NULL) AS teams_confirmed,
+        (SELECT count(*)::int FROM teams x WHERE x.tournament_id = t.id AND x.reserved_at IS NOT NULL) AS teams_reserved
         """;
 
     // Filtros da lista. Os "::tipo" evitam erros do Npgsql quando o valor é NULL.
@@ -31,13 +32,13 @@ public sealed class TournamentStore(NpgsqlDataSource db)
         """;
 
     /// <summary>
-    /// "open" -> inscrições abertas; "ongoing" -> inscrições fechadas ou a decorrer; "finished" -> terminados;
+    /// "open" -> aberto (inscrições abertas ou "inscrições fechadas" até ao primeiro jogo); "ongoing" -> a decorrer; "finished" -> terminados;
     /// "mine" (e sem filtro) -> todos os estados públicos (o "mine" restringe-se depois aos torneios do utilizador).
     /// </summary>
     public static string[] StatusesFor(string? filter) => filter switch
     {
-        "open" => ["registration_open"],
-        "ongoing" => ["registration_closed", "ongoing"],
+        "open" => ["registration_open", "registration_closed"],
+        "ongoing" => ["ongoing"],
         "finished" => ["finished"],
         _ => ["registration_open", "registration_closed", "ongoing", "finished"]
     };
@@ -46,7 +47,7 @@ public sealed class TournamentStore(NpgsqlDataSource db)
     {
         var args = new
         {
-            Statuses = StatusesFor(f.Status),
+            Statuses = StatusesFor(f.Status == "mine" && f.MineScope is not null ? f.MineScope : f.Status),
             From = f.From,
             To = f.To,
             f.Sport,
@@ -58,11 +59,11 @@ public sealed class TournamentStore(NpgsqlDataSource db)
         };
 
         // Terminados: mais recentes primeiro. Os outros: o que começa primeiro aparece primeiro.
-        // Os meus torneios: os que ainda não terminaram primeiro.
+        // Os meus torneios: 1) em inscrição (o utilizador está num lobby), 2) a decorrer, 3) terminados.
         var order = f.Status switch
         {
             "finished" => "t.ends_on DESC, t.name",
-            "mine" => "(t.status = 'finished'), t.starts_on ASC, t.name",
+            "mine" => "CASE t.status WHEN 'registration_open' THEN 0 WHEN 'registration_closed' THEN 0 WHEN 'finished' THEN 2 ELSE 1 END, t.starts_on ASC, t.name",
             _ => "t.starts_on ASC, t.name"
         };
 
@@ -78,6 +79,15 @@ public sealed class TournamentStore(NpgsqlDataSource db)
         return (rows, total);
     }
 
+    /// <summary>Tem uma penalização ativa (não pagou a tempo) neste torneio?</summary>
+    public async Task<bool> IsPenalizedAsync(Guid tournamentId, Guid userId, DateTime now, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        return await conn.ExecuteScalarAsync<bool>(new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM reservation_penalties WHERE tournament_id = @T AND user_id = @U AND until_at > @Now)",
+            new { T = tournamentId, U = userId, Now = now }, cancellationToken: ct));
+    }
+
     public async Task<TournamentRow?> FindAsync(Guid id, CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -91,7 +101,14 @@ public sealed class TournamentStore(NpgsqlDataSource db)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         return (await conn.QueryAsync<TeamRow>(new CommandDefinition(
-            "SELECT id, name, color_hex, (confirmed_at IS NOT NULL) AS confirmed FROM teams WHERE tournament_id = @Id ORDER BY (confirmed_at IS NULL), lower(name)",
+            """
+            SELECT id, name, color_hex, (confirmed_at IS NOT NULL) AS confirmed, is_private,
+                   CASE WHEN confirmed_at IS NOT NULL THEN 'confirmed'
+                        WHEN reserved_at IS NOT NULL THEN 'reserved'
+                        WHEN closed_at IS NOT NULL THEN 'queued'
+                        ELSE 'forming' END AS state
+            FROM teams WHERE tournament_id = @Id ORDER BY (confirmed_at IS NULL), lower(name)
+            """,
             new { Id = tournamentId }, cancellationToken: ct))).ToList();
     }
 

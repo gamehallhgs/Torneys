@@ -6,7 +6,7 @@ public sealed record UsernameCheckDto(bool Available, string? Reason, string? Me
 
 public sealed record ChangeUsernameRequest(string? Username);
 
-public sealed record ChangeUsernameResponse(string Username, string Tag, DateTime? NextChangeAt);
+public sealed record ChangeUsernameResponse(string Username, string Tag, int ChangesLeft);
 
 /// <summary>Disponibilidade e mudança de username.</summary>
 public static class UsernameEndpoints
@@ -63,15 +63,15 @@ public static class UsernameEndpoints
                     return UsernameErrors.Taken.ToResult();
                 case UsernameChangeResult.RecentlyUsed:
                     return UsernameErrors.RecentlyUsed.ToResult();
-                case UsernameChangeResult.Cooldown:
-                    return UsernameErrors.Cooldown(change.NextChangeAt!.Value).ToResult();
+                case UsernameChangeResult.ChangeUsed:
+                    return UsernameErrors.ChangeUsed.ToResult();
             }
 
             var user = await users.FindUserByIdAsync(uid, ct);
             return user is null
                 ? Results.Unauthorized()
                 : Results.Ok(new ChangeUsernameResponse(
-                    user.Username, user.UsernameTag, UsernameRules.NextChangeAt(user.UsernameChangedAt, now)));
+                    user.Username, user.UsernameTag, UsernameRules.ChangesLeft(user.UsernameChangedAt)));
         }).RequireAuthorization("Authenticated").RequireRateLimiting("sensitive");
     }
 }
@@ -83,7 +83,7 @@ internal static class UsernameErrors
     public static readonly ApiError RecentlyUsed =
         new(409, "username_reserved", "Este username foi usado há pouco tempo e está reservado.");
 
-    public static ApiError Cooldown(DateTime nextChangeAt) => new(
-        409, "username_change_cooldown",
-        $"Só podes mudar o username uma vez por mês. Podes mudar de novo a {nextChangeAt:dd/MM/yyyy}.");
+    public static readonly ApiError ChangeUsed = new(
+        409, "username_change_used",
+        "Já usaste a tua mudança de username gratuita. Mudanças futuras serão pagas (ainda não disponível).");
 }

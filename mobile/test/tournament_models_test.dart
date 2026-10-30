@@ -2,7 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gamehall_torneios/core/format.dart';
 import 'package:gamehall_torneios/features/tournaments/tournament_models.dart';
 
-Map<String, dynamic> summaryJson({int teams = 5, int maxTeams = 16, int? confirmed, String status = 'registration_open'}) => {
+Map<String, dynamic> summaryJson({
+  int teams = 5,
+  int maxTeams = 16,
+  int? confirmed,
+  int reserved = 0, // reservadas a pagar, além das confirmadas
+  String status = 'registration_open',
+}) => {
       'id': 'a1',
       'name': 'Taça Teste',
       'organizerName': 'Clube Demo',
@@ -15,7 +21,8 @@ Map<String, dynamic> summaryJson({int teams = 5, int maxTeams = 16, int? confirm
       'entryFeeCents': 6000,
       'teamsRegistered': teams,
       'teamsConfirmed': confirmed ?? 0,
-      'isFull': (confirmed ?? 0) >= maxTeams,
+      'isFull': (confirmed ?? 0) + reserved >= maxTeams,
+      'isSoldOut': (confirmed ?? 0) >= maxTeams,
       'maxTeams': maxTeams,
       'minAge': 18,
       'maxAge': null,
@@ -53,10 +60,19 @@ void main() {
     expect(TournamentLabels.teamsLine(8, 8, 0), '8/8 equipas confirmadas');
   });
 
-  test('etiqueta "Cheio" só nos torneios com inscrições abertas e vagas esgotadas', () {
+  test('Reservado: todas reservadas ou confirmadas, mas nem todas confirmadas', () {
+    final r = TournamentSummary.fromJson(summaryJson(teams: 12, maxTeams: 8, confirmed: 5, reserved: 3));
+    expect(r.isFull, isTrue);
+    expect(r.isSoldOut, isFalse);
+    expect(r.showFullFlag, isTrue);
+    expect(r.showSoldOut, isFalse);
+  });
+
+  test('etiqueta "Lotado" só nos torneios com inscrições abertas e vagas esgotadas', () {
     final full = TournamentSummary.fromJson(summaryJson(teams: 12, maxTeams: 8, confirmed: 8));
     expect(full.isFull, isTrue);
     expect(full.showFullFlag, isTrue);
+    expect(full.showSoldOut, isTrue);
     final ongoing =
         TournamentSummary.fromJson(summaryJson(teams: 8, maxTeams: 8, confirmed: 8, status: 'ongoing'));
     expect(ongoing.isFull, isTrue);

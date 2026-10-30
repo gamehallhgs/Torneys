@@ -11,7 +11,7 @@ class GhColors {
   static const Color secondary = Color(0xFF6F6F6F);
   static const Color danger = Color(0xFFB3261E);
 
-  /// Laranja da etiqueta "Cheio" (combina com o azul/violeta do tema).
+  /// Laranja da etiqueta "Lotado" (combina com o azul/violeta do tema).
   static const Color full = Color(0xFFFF9F43);
 
   static const Color fieldFill = Color(0x1AFFFFFF);

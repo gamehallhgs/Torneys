@@ -7,6 +7,7 @@ TournamentSummary summary({
   String status = 'registration_open',
   int registered = 5,
   int confirmed = 0,
+  int reserved = 0, // vagas reservadas a pagar (além das confirmadas)
   int max = 8,
 }) =>
     TournamentSummary.fromJson({
@@ -22,7 +23,8 @@ TournamentSummary summary({
       'entryFeeCents': 6000,
       'teamsRegistered': registered,
       'teamsConfirmed': confirmed,
-      'isFull': confirmed >= max,
+      'isFull': confirmed + reserved >= max,
+      'isSoldOut': confirmed >= max,
       'maxTeams': max,
       'minAge': 18,
       'maxAge': null,
@@ -41,27 +43,33 @@ Future<void> pump(WidgetTester tester, TournamentSummary t) async {
 }
 
 void main() {
-  testWidgets('aberto e cheio mostra a flag Cheio', (tester) async {
+  testWidgets('aberto e lotado mostra a flag Lotado', (tester) async {
     await pump(tester, summary(registered: 12, confirmed: 8));
-    expect(find.text('Cheio'), findsOneWidget);
+    expect(find.text('Lotado'), findsOneWidget);
     expect(find.text('8/8 equipas confirmadas · 4 em formação'), findsOneWidget);
   });
 
-  testWidgets('aberto com vagas não mostra Cheio', (tester) async {
+  testWidgets('todas reservadas mas nem todas confirmadas mostra Reservado', (tester) async {
+    await pump(tester, summary(registered: 12, confirmed: 5, reserved: 3));
+    expect(find.text('Reservado'), findsOneWidget);
+    expect(find.text('Lotado'), findsNothing);
+  });
+
+  testWidgets('aberto com vagas não mostra etiqueta', (tester) async {
     await pump(tester, summary(registered: 6, confirmed: 3));
-    expect(find.text('Cheio'), findsNothing);
+    expect(find.text('Lotado'), findsNothing);
     expect(find.text('3/8 equipas confirmadas · 3 em formação'), findsOneWidget);
   });
 
   testWidgets('sem equipas em formação não mostra o sufixo', (tester) async {
     await pump(tester, summary(registered: 8, confirmed: 8));
     expect(find.text('8/8 equipas confirmadas'), findsOneWidget);
-    expect(find.text('Cheio'), findsOneWidget);
+    expect(find.text('Lotado'), findsOneWidget);
   });
 
-  testWidgets('torneio cheio mas a decorrer não mostra Cheio', (tester) async {
+  testWidgets('torneio lotado mas a decorrer não mostra etiqueta', (tester) async {
     await pump(tester, summary(status: 'ongoing', registered: 8, confirmed: 8));
-    expect(find.text('Cheio'), findsNothing);
+    expect(find.text('Lotado'), findsNothing);
   });
 
   testWidgets('toque no cartão chama onTap', (tester) async {

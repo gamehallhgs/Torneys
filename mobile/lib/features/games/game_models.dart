@@ -196,13 +196,70 @@ class Highlight {
       );
 }
 
+/// Jogador no plantel de um jogo. [slot] null = suplente; 0 = guarda-redes.
+class SquadPlayer {
+  const SquadPlayer({required this.displayName, this.position, this.slot});
+
+  final String displayName;
+  final String? position;
+  final int? slot;
+
+  bool get isStarter => slot != null;
+
+  factory SquadPlayer.fromJson(Map<String, dynamic> j) => SquadPlayer(
+        displayName: (j['displayName'] ?? '').toString(),
+        position: j['position'] as String?,
+        slot: (j['slot'] as num?)?.toInt(),
+      );
+}
+
+/// Plantel de uma equipa num jogo (por agora o plantel por defeito da equipa).
+class Squad {
+  const Squad({required this.formation, required this.players, this.isFormal = true});
+
+  /// Plantel formal (formação e titulares definidos pelo líder). Senão é só a lista dos membros, do guarda-redes ao avançado.
+  final bool isFormal;
+  final String formation;
+  final List<SquadPlayer> players;
+
+  List<SquadPlayer> get bench => players.where((p) => !p.isStarter).toList();
+
+  SquadPlayer? atSlot(int slot) {
+    for (final p in players) {
+      if (p.slot == slot) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  static Squad? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final j = Map<String, dynamic>.from(raw);
+    return Squad(
+      formation: (j['formation'] ?? '').toString(),
+      isFormal: j['isFormal'] == true || (j['isFormal'] == null && (j['formation'] ?? '').toString().isNotEmpty),
+      players: ((j['players'] as List?) ?? const [])
+          .map((e) => SquadPlayer.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+  }
+}
+
 class GameDetail {
   const GameDetail({
     required this.game,
     required this.tournamentName,
     required this.events,
     required this.highlights,
+    this.homeSquad,
+    this.awaySquad,
   });
+
+  final Squad? homeSquad;
+  final Squad? awaySquad;
 
   final Game game;
   final String tournamentName;
@@ -218,6 +275,8 @@ class GameDetail {
       tournamentName: (j['tournamentName'] ?? '').toString(),
       events: list('events').map(GameEvent.fromJson).toList(),
       highlights: list('highlights').map(Highlight.fromJson).toList(),
+      homeSquad: Squad.fromJson(j['homeSquad']),
+      awaySquad: Squad.fromJson(j['awaySquad']),
     );
   }
 }
@@ -400,5 +459,23 @@ class Bracket {
     final third = games.where((g) => g.stage == 'third_place').toList()
       ..sort((a, b) => a.matchNumber.compareTo(b.matchNumber));
     return Bracket(rounds: rounds, thirdPlace: third);
+  }
+}
+
+/// Próximo jogo do torneio e próximo jogo do utilizador (null = não há / não joga neste torneio).
+class NextGames {
+  const NextGames({this.next, this.mine});
+
+  final Game? next;
+  final Game? mine;
+
+  bool get isEmpty => next == null && mine == null;
+
+  /// O próximo jogo do utilizador já é o próximo do torneio: mostra-se só um cartão ("o teu e o próximo").
+  bool get sameGame => next != null && mine != null && next!.id == mine!.id;
+
+  factory NextGames.fromJson(Map<String, dynamic> j) {
+    Game? one(Object? v) => v is Map ? Game.fromJson(Map<String, dynamic>.from(v)) : null;
+    return NextGames(next: one(j['next']), mine: one(j['mine']));
   }
 }

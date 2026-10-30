@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
 import 'models.dart';
+import 'push_service.dart';
 import 'token_store.dart';
 
 enum AuthStatus { loading, signedOut, legalRequired, signedIn }
@@ -11,12 +12,15 @@ enum AuthStatus { loading, signedOut, legalRequired, signedIn }
 /// Estado da sessão. Regra de ouro: só existe UM pedido de renovação (refresh) de cada vez,
 /// porque a API trata dois refresh iguais em simultâneo como roubo de token e fecha a sessão.
 class AuthController extends ChangeNotifier {
-  AuthController({required this.api, required this.store}) {
+  AuthController({required this.api, required this.store, this.push = const NoPushService()}) {
     api.onRefresh = refreshSession;
+    push.onTokenRefresh((t) => _registerDevice(t, force: true));
   }
 
   final ApiClient api;
   final TokenStore store;
+  final PushService push;
+  String? _registeredPushToken;
 
   AuthStatus _status = AuthStatus.loading;
   AppUser? _user;
@@ -64,6 +68,7 @@ class AuthController extends ChangeNotifier {
     required String displayName,
     required String username,
     required String birthDateApi,
+    required String gender,
     required LegalInfo legal,
   }) async {
     (await api.post('/api/v1/auth/register', body: <String, dynamic>{
@@ -72,6 +77,7 @@ class AuthController extends ChangeNotifier {
       'displayName': displayName.trim(),
       'username': username.trim(),
       'birthDate': birthDateApi,
+      'gender': gender,
       'acceptTerms': true,
       'acceptPrivacy': true,
       'termsVersion': legal.termsVersion,
@@ -107,6 +113,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await _unregisterDevice();
     final token = await store.readRefreshToken();
     if (token != null) {
       try {
@@ -171,7 +178,7 @@ class AuthController extends ChangeNotifier {
     // A API revoga as outras sessões; esta continua válida.
   }
 
-  /// Muda o username (1 vez por mês). A tag mantém-se.
+  /// Muda o username (só 1 vez por conta). A tag mantém-se.
   Future<void> changeUsername(String username) async {
     final res = (await api.patch('/api/v1/me/username',
             auth: true, body: <String, dynamic>{'username': username.trim()}))
@@ -181,9 +188,46 @@ class AuthController extends ChangeNotifier {
       _user = current.copyWith(
         username: (res.json['username'] ?? current.username).toString(),
         usernameTag: (res.json['usernameTag'] ?? current.usernameTag).toString(),
-        usernameNextChangeAt: res.json['nextChangeAt'] == null
-            ? null
-            : DateTime.tryParse(res.json['nextChangeAt'].toString())?.toLocal(),
+        usernameChangesLeft: (res.json['changesLeft'] as num?)?.toInt() ?? 0,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Guarda na conta que o mini-guia já foi visto (ou saltado). Falhar não é grave: volta a aparecer.
+  Future<void> markOnboardingSeen() async {
+    final current = _user;
+    if (current == null || current.onboardingSeen) {
+      return;
+    }
+    _user = current.copyWith(onboardingSeen: true);
+    notifyListeners();
+    try {
+      (await api.post('/api/v1/me/onboarding-seen', auth: true)).ensureOk();
+    } catch (e) {
+      debugPrint('[GameHall] não foi possível guardar o guia como visto: $e');
+    }
+  }
+
+  /// Interruptor geral de push: desligado = nenhum push (a central de notificações na app não muda).
+  Future<void> setPushEnabled(bool enabled) async {
+    final res = (await api.put('/api/v1/me/push', auth: true, body: <String, dynamic>{'enabled': enabled})).ensureOk();
+    final current = _user;
+    if (current != null) {
+      _user = current.copyWith(pushEnabled: res.json['pushEnabled'] != false);
+      notifyListeners();
+    }
+  }
+
+  /// Muda o nome que aparece (sempre que o utilizador quiser).
+  Future<void> changeName(String displayName) async {
+    final res = (await api.patch('/api/v1/me/name',
+            auth: true, body: <String, dynamic>{'displayName': displayName.trim()}))
+        .ensureOk();
+    final current = _user;
+    if (current != null) {
+      _user = current.copyWith(
+        displayName: (res.json['displayName'] ?? displayName.trim()).toString(),
       );
       notifyListeners();
     }
@@ -254,6 +298,40 @@ class AuthController extends ChangeNotifier {
     _setStatus(_legal?.requiresAcceptance == true
         ? AuthStatus.legalRequired
         : AuthStatus.signedIn);
+    _registerDevice(null);
+  }
+
+  /// Regista o token de push deste telemóvel na conta (uma vez por token; falhar não é grave).
+  Future<void> _registerDevice(String? token, {bool force = false}) async {
+    try {
+      if (_user == null) {
+        return;
+      }
+      final t = token ?? await push.token();
+      if (t == null || (!force && t == _registeredPushToken)) {
+        return;
+      }
+      (await api.post('/api/v1/me/devices',
+              auth: true, body: <String, dynamic>{'token': t, 'platform': push.platform}))
+          .ensureOk();
+      _registeredPushToken = t;
+    } catch (e) {
+      debugPrint('[GameHall] não foi possível registar o telemóvel para push: $e');
+    }
+  }
+
+  /// Ao terminar sessão este telemóvel deixa de receber os push desta conta.
+  Future<void> _unregisterDevice() async {
+    final t = _registeredPushToken;
+    _registeredPushToken = null;
+    if (t == null) {
+      return;
+    }
+    try {
+      await api.post('/api/v1/me/devices/remove', auth: true, body: <String, dynamic>{'token': t});
+    } catch (e) {
+      debugPrint('[GameHall] não foi possível remover o telemóvel: $e');
+    }
   }
 
   Future<void> _clearSession() async {

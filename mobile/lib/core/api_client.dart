@@ -134,6 +134,12 @@ class ApiClient {
   Future<ApiResponse> post(String path, {Object? body, bool auth = false}) =>
       _request('POST', path, body, auth);
 
+  Future<ApiResponse> delete(String path, {bool auth = false}) =>
+      _request('DELETE', path, null, auth);
+
+  Future<ApiResponse> put(String path, {Object? body, bool auth = false}) =>
+      _request('PUT', path, body, auth);
+
   Future<ApiResponse> patch(String path, {Object? body, bool auth = false}) =>
       _request('PATCH', path, body, auth);
 

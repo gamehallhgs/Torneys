@@ -5,10 +5,12 @@ import '../../core/error_messages.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../widgets/gh_widgets.dart';
+import '../../widgets/skeleton.dart';
 import '../geo/geo_models.dart';
 import '../geo/location_picker.dart';
 import '../notifications/notification_bell.dart';
 import '../teams/pending_section.dart';
+import '../teams/join_by_code_screen.dart';
 import '../teams/team_lobby_screen.dart';
 import '../teams/team_models.dart';
 import '../teams/teams_repository.dart';
@@ -43,6 +45,9 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   bool _started = false;
 
   String _status = 'open';
+
+  /// Dentro de "Os meus torneios": null = todos; senão open, ongoing ou finished.
+  String? _mineScope;
   String? _sport;
   LocationFilter _location = LocationFilter.none;
   DateTimeRange? _range;
@@ -92,6 +97,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     try {
       final result = await _repo.list(
         status: _status,
+        scope: _mineScope,
         sport: _sport,
         district: _location.district,
         municipality: _location.municipality,
@@ -165,32 +171,34 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     }
   }
 
+  Future<void> _openCodeScreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const JoinByCodeScreen()),
+    );
+    if (mounted) {
+      await _load(reset: true);
+    }
+  }
+
   void _changeStatus(String status) {
     if (status == _status) {
       return;
     }
     setState(() {
       _status = status;
+      _mineScope = null;
       _requests = const [];
       _actionError = null;
     });
     _load(reset: true);
   }
 
-  Future<void> _pickRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 3),
-      initialDateRange: _range,
-      helpText: 'Filtrar por datas',
-      saveText: 'Aplicar',
-    );
-    if (picked != null) {
-      setState(() => _range = picked);
-      _load(reset: true);
+  void _changeMineScope(String? scope) {
+    if (scope == _mineScope) {
+      return;
     }
+    setState(() => _mineScope = scope);
+    _load(reset: true);
   }
 
   void _clearRange() {
@@ -207,16 +215,9 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     _load(reset: true);
   }
 
-  Future<void> _pickLocation() async {
-    final picked = await pickLocation(context, geo: _geo, current: _location);
-    if (picked != null && picked != _location && mounted) {
-      setState(() => _location = picked);
-      _load(reset: true);
-    }
-  }
-
   void _clearFilters() {
     setState(() {
+      _mineScope = null;
       _range = null;
       _sport = null;
       _location = LocationFilter.none;
@@ -224,12 +225,204 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     _load(reset: true);
   }
 
-  bool get _hasFilters => _range != null || _sport != null || _location.isActive;
+  bool get _hasFilters => _mineScope != null || _range != null || _sport != null || _location.isActive;
 
   void _open(TournamentSummary t) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => TournamentDetailScreen(tournamentId: t.id, initialName: t.name),
     ));
+  }
+
+  static const _mineScopes = <(String?, String)>[
+    (null, 'Todos'),
+    ('open', 'Em inscrição'),
+    ('ongoing', 'A decorrer'),
+    ('finished', 'Terminados'),
+  ];
+
+  String _mineScopeLabel(String code) => _mineScopes.firstWhere((s) => s.$1 == code).$2;
+
+  int get _filterCount => (_mineScope != null ? 1 : 0) + (_range != null ? 1 : 0) + (_sport != null ? 1 : 0) + (_location.isActive ? 1 : 0);
+
+  /// Um só botão "Filtros" (com o número de filtros ativos) e, por baixo, os filtros ativos como etiquetas
+  /// que se removem com um toque.
+  Widget _filtersBar() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _openFilters,
+          icon: const Icon(Icons.tune, size: 18),
+          label: Text(_filterCount == 0 ? 'Filtros' : 'Filtros ($_filterCount)'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: BorderSide(color: _filterCount == 0 ? GhColors.fieldBorder : GhColors.success),
+          ),
+        ),
+        if (_hasFilters)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (_mineScope != null)
+                  InputChip(
+                    label: Text(_mineScopeLabel(_mineScope!)),
+                    onDeleted: () => _changeMineScope(null),
+                  ),
+                if (_range != null)
+                  InputChip(
+                    label: Text(Fmt.dateRange(_range!.start, _range!.end)),
+                    onDeleted: _clearRange,
+                  ),
+                if (_sport != null)
+                  InputChip(
+                    label: Text(TournamentLabels.sport(_sport!)),
+                    onDeleted: () => _changeSport(TournamentLabels.allSports),
+                  ),
+                if (_location.isActive)
+                  InputChip(
+                    label: Text(_location.label),
+                    onDeleted: () {
+                      setState(() => _location = LocationFilter.none);
+                      _load(reset: true);
+                    },
+                  ),
+                ActionChip(label: const Text('Limpar tudo'), onPressed: _clearFilters),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Folha de filtros: escolhes vários filtros ao mesmo tempo e só aplicas no fim, com "Selecionar".
+  Future<void> _openFilters() async {
+    var mineScope = _mineScope;
+    var sport = _sport;
+    var range = _range;
+    var location = _location;
+    final apply = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: GhColors.surface,
+      showDragHandle: true,
+      builder: (sheet) => StatefulBuilder(
+        builder: (sheet, setSheet) => SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(sheet).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Filtros', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                if (_status == 'mine') ...[
+                  const Text('Estado (por omissão: todos, em inscrição primeiro)',
+                      style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final (code, label) in _mineScopes)
+                        ChoiceChip(
+                          label: Text(label),
+                          selected: mineScope == code,
+                          onSelected: (_) => setSheet(() => mineScope = code),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                const Text('Modalidade', style: TextStyle(color: Colors.white70)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final s in _sports)
+                      ChoiceChip(
+                        label: Text(s == TournamentLabels.allSports ? 'Todas' : TournamentLabels.sport(s)),
+                        selected: (sport ?? TournamentLabels.allSports) == s,
+                        onSelected: (_) => setSheet(() => sport = TournamentLabels.sportFilter(s)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.date_range),
+                  title: const Text('Datas'),
+                  subtitle: Text(range == null ? 'Qualquer data' : Fmt.dateRange(range!.start, range!.end)),
+                  trailing: range == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpar datas',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setSheet(() => range = null),
+                        ),
+                  onTap: () async {
+                    final now = DateTime.now();
+                    final picked = await showDateRangePicker(
+                      context: sheet,
+                      firstDate: DateTime(now.year - 3),
+                      lastDate: DateTime(now.year + 3),
+                      initialDateRange: range,
+                      helpText: 'Filtrar por datas',
+                      saveText: 'Aplicar',
+                    );
+                    if (picked != null) {
+                      setSheet(() => range = picked);
+                    }
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.place_outlined),
+                  title: const Text('Localidade'),
+                  subtitle: Text(location.label),
+                  trailing: location.isActive
+                      ? IconButton(
+                          tooltip: 'Limpar localidade',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setSheet(() => location = LocationFilter.none),
+                        )
+                      : null,
+                  onTap: () async {
+                    final picked = await pickLocation(sheet, geo: _geo, current: location);
+                    if (picked != null) {
+                      setSheet(() => location = picked);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                GhButton(label: 'Selecionar', onPressed: () => Navigator.of(sheet).pop(true)),
+                TextButton(
+                  onPressed: () => setSheet(() {
+                    mineScope = null;
+                    sport = null;
+                    range = null;
+                    location = LocationFilter.none;
+                  }),
+                  child: const Text('Limpar tudo'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (apply == true && mounted) {
+      setState(() {
+        _mineScope = mineScope;
+        _sport = sport;
+        _range = range;
+        _location = location;
+      });
+      await _load(reset: true);
+    }
   }
 
   @override
@@ -251,89 +444,16 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
             trailing: NotificationBell(onReturn: () => _load(reset: true)),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickRange,
-                  icon: const Icon(Icons.date_range, size: 18),
-                  label: Text(
-                    _range == null
-                        ? 'Datas'
-                        : Fmt.dateRange(_range!.start, _range!.end),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: GhColors.fieldBorder),
-                  ),
-                ),
-              ),
-              if (_range != null)
-                IconButton(
-                  tooltip: 'Limpar datas',
-                  onPressed: _clearRange,
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                ),
-              const SizedBox(width: 8),
-              PopupMenuButton<String>(
-                tooltip: 'Modalidade',
-                initialValue: _sport ?? TournamentLabels.allSports,
-                onSelected: _changeSport,
-                itemBuilder: (_) => [
-                  for (final s in _sports)
-                    PopupMenuItem<String>(
-                      value: s,
-                      child: Text(s == TournamentLabels.allSports ? 'Todas as modalidades' : TournamentLabels.sport(s)),
-                    ),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: GhColors.fieldBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.sports_soccer, size: 18),
-                      const SizedBox(width: 6),
-                      Text(_sport == null ? 'Todas' : TournamentLabels.sport(_sport!)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          _filtersBar(),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _openCodeScreen,
+              icon: const Icon(Icons.vpn_key_outlined, size: 18),
+              label: const Text('Tenho um código'),
+            ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickLocation,
-                  icon: const Icon(Icons.place_outlined, size: 18),
-                  label: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(_location.label, overflow: TextOverflow.ellipsis),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: _location.isActive ? GhColors.success : GhColors.fieldBorder),
-                  ),
-                ),
-              ),
-              if (_location.isActive)
-                IconButton(
-                  tooltip: 'Limpar localidade',
-                  onPressed: () {
-                    setState(() => _location = LocationFilter.none);
-                    _load(reset: true);
-                  },
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
           if (_actionError != null) GhBanner.error(_actionError!),
           if (_status == 'mine')
             PendingSection(
@@ -346,10 +466,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
             GhBanner.error(_error!),
             GhButton(label: 'Tentar novamente', onPressed: () => _load(reset: _items.isEmpty)),
           ] else if (_items.isEmpty && _loading)
-            const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator(color: Colors.white)),
-            )
+            const SkeletonList()
           else if (_items.isEmpty)
             Padding(
               padding: const EdgeInsets.all(32),

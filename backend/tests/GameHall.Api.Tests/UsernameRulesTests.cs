@@ -115,14 +115,13 @@ public class UsernameRulesTests
     public void Tag_shape(string? tag, bool expected) => Assert.Equal(expected, UsernameRules.IsValidTag(tag));
 
     [Fact]
-    public void Username_can_be_changed_once_a_month()
+    public void Username_can_be_changed_only_once()
     {
         var now = new DateTime(2026, 10, 24, 12, 0, 0, DateTimeKind.Utc);
-        Assert.Null(UsernameRules.NextChangeAt(null, now));                           // nunca mudou: livre
-        Assert.Equal(now.AddDays(20), UsernameRules.NextChangeAt(now.AddDays(-10), now));
-        Assert.Null(UsernameRules.NextChangeAt(now.AddDays(-30), now));               // passou exatamente 1 mês
-        Assert.Null(UsernameRules.NextChangeAt(now.AddDays(-45), now));
-        Assert.NotNull(UsernameRules.NextChangeAt(now.AddMinutes(-1), now));
+        Assert.Equal(1, UsernameRules.ChangesLeft(null));                 // nunca mudou: 1 mudança gratuita
+        Assert.Equal(0, UsernameRules.ChangesLeft(now.AddMinutes(-1)));   // já usou
+        Assert.Equal(0, UsernameRules.ChangesLeft(now.AddDays(-400)));    // nunca volta, por muito tempo que passe
+        Assert.Equal(1, UsernameRules.FreeChanges);
     }
 
     [Fact]

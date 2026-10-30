@@ -3,7 +3,7 @@
 --    É único (sem distinguir maiúsculas: guardamos sempre em minúsculas). Mostra-se como @hugo.
 --  * username_tag: 3 algarismos ao acaso, atribuídos na criação da conta e que NÃO mudam quando o username muda.
 --    Para convidar é preciso o par completo (hugo#482); serve de travão contra convites em massa a nomes fáceis.
---  * username_changed_at: a mudança é permitida 1 vez por mês (a primeira mudança é livre).
+--  * username_changed_at: a mudança é permitida 1 vez por conta (regra desde 2026-10-29; antes era 1 por mês).
 --  * username_history: o username antigo fica reservado 30 dias (só o antigo dono o pode recuperar).
 --  * username_lookup_failures: tentativas falhadas de convidar por username#tag (máx. 10 por hora por utilizador).
 ALTER TABLE users ADD COLUMN username text NULL;

@@ -52,6 +52,59 @@ public static class TeamEndpoints
         teams.MapPatch("/settings", (Guid teamId, UpdateTeamSettingsRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
             Act(ctx, uid => svc.UpdateSettingsAsync(uid, teamId, req, ct)));
 
+        teams.MapPost("/invite-code/regenerate", async (Guid teamId, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            var r = await svc.RegenerateCodeAsync(uid, teamId, ct);
+            return r.IsOk ? Results.Ok(r.Value) : r.Error!.ToResult();
+        }).RequireRateLimiting("auth");
+
+        // Código de convite: ver a equipa antes de entrar, e entrar.
+        app.MapGet("/api/v1/invite-codes/{code}", async (string code, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            var r = await svc.PreviewCodeAsync(uid, code, ct);
+            return r.IsOk ? Results.Ok(r.Value) : r.Error!.ToResult();
+        }).RequireRateLimiting("lookup");
+
+        app.MapPost("/api/v1/invite-codes/{code}/join", async (string code, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            var r = await svc.JoinByCodeAsync(uid, code, ct);
+            return r.IsOk ? Results.Json(r.Value, statusCode: r.Value!.Joined ? 200 : 202) : r.Error!.ToResult();
+        }).RequireRateLimiting("auth");
+
+        teams.MapPost("/ready", (Guid teamId, SetReadyRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.SetReadyAsync(uid, teamId, req.Ready, ct)));
+
+        teams.MapPost("/close", (Guid teamId, CloseTeamRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.CloseAsync(uid, teamId, req.PaymentMode, ct))).RequireRateLimiting("auth");
+
+        teams.MapPost("/reopen", (Guid teamId, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.ReopenAsync(uid, teamId, ct)));
+
+        teams.MapPost("/disband", (Guid teamId, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.DisbandAsync(uid, teamId, ct)));
+
+        // Pagamento SIMULADO: no futuro chama a API de pagamentos real.
+        teams.MapPost("/pay", (Guid teamId, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.PayAsync(uid, teamId, ct))).RequireRateLimiting("auth");
+
+        teams.MapPut("/lineup", (Guid teamId, SetLineupRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
+            Act(ctx, uid => svc.SetLineupAsync(uid, teamId, req, ct)));
+
         teams.MapPost("/position", (Guid teamId, SetPositionRequest req, HttpContext ctx, TeamService svc, CancellationToken ct) =>
             Act(ctx, uid => svc.SetPositionAsync(uid, teamId, req.Position, ct)));
 

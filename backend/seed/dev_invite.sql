@@ -3,7 +3,7 @@
 -- Uso:  make invite-sim TEAM="Dragões Urbanos" TORNEIO="Outono" EMAIL=eu@exemplo.pt
 --       (Windows: .\scripts\dev.ps1 invite-sim "Dragões Urbanos" eu@exemplo.pt "Outono")
 -- TORNEIO é um pedaço do nome do torneio (para distinguir equipas com o mesmo nome em torneios diferentes).
--- Só convida quem ainda não está numa equipa desse torneio e se a equipa não estiver confirmada nem cheia.
+-- Só convida quem ainda não está numa equipa desse torneio e se a equipa não estiver fechada nem cheia.
 WITH pick AS (
   SELECT t.id AS team_id, t.tournament_id, t.host_user_id AS host, u.id AS invitee
   FROM teams t
@@ -13,7 +13,7 @@ WITH pick AS (
     AND tr.name ILIKE '%' || :'tournament' || '%'
     AND t.host_user_id IS NOT NULL
     AND t.host_user_id <> u.id
-    AND t.confirmed_at IS NULL
+    AND t.closed_at IS NULL
     AND (SELECT count(*) FROM team_members m WHERE m.team_id = t.id) < tr.max_players_per_team
     AND NOT EXISTS (SELECT 1 FROM team_members m WHERE m.tournament_id = t.tournament_id AND m.user_id = u.id)
     AND NOT EXISTS (SELECT 1 FROM team_invites i WHERE i.team_id = t.id AND i.invited_user_id = u.id AND i.status = 'pending')

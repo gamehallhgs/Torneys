@@ -4,6 +4,34 @@ import '../../core/format.dart';
 
 /// Textos em português dos códigos devolvidos pela API.
 class TournamentLabels {
+  /// Contagem decrescente das inscrições: só aparece nos últimos 3 dias, por escalões
+  /// (3, 2, 1 dias, 12 h, 1 h, 30 min): "Fecha em menos de 12 horas". Null se ainda falta muito ou já acabou.
+  static String? countdown(DateTime closesAt, {DateTime? now}) {
+    final left = closesAt.difference(now ?? DateTime.now());
+    if (left <= Duration.zero) {
+      return null;
+    }
+    if (left <= const Duration(minutes: 30)) {
+      return 'Fecha em menos de 30 minutos';
+    }
+    if (left <= const Duration(hours: 1)) {
+      return 'Fecha em menos de 1 hora';
+    }
+    if (left <= const Duration(hours: 12)) {
+      return 'Fecha em menos de 12 horas';
+    }
+    if (left <= const Duration(days: 1)) {
+      return 'Fecha em menos de 1 dia';
+    }
+    if (left <= const Duration(days: 2)) {
+      return 'Fecha em menos de 2 dias';
+    }
+    if (left <= const Duration(days: 3)) {
+      return 'Fecha em menos de 3 dias';
+    }
+    return null;
+  }
+
   TournamentLabels._();
 
   static String sport(String code) => switch (code) {
@@ -60,7 +88,10 @@ class TournamentLabels {
         'registration_closed' => 'As inscrições não estão abertas.',
         'age_too_young' => 'Este torneio é para participantes com $minAge anos ou mais.',
         'age_too_old' => 'Este torneio é para participantes até $maxAge anos.',
-        'tournament_full' => 'O torneio já tem todas as equipas confirmadas.',
+        'gender_not_allowed' => 'Este torneio não está aberto ao teu género.',
+        'tournament_full' => 'O torneio está lotado: todas as vagas estão confirmadas.',
+        'player_penalized' =>
+          'Estás penalizado por não teres pago a tempo: ainda não podes entrar numa equipa deste torneio.',
         _ => 'Não podes criar equipa neste torneio.',
       };
 }
@@ -85,6 +116,8 @@ class TournamentSummary {
     required this.registrationClosesAt,
     required this.teamsConfirmed,
     required this.isFull,
+    this.isSoldOut = false,
+    this.gender = 'mixed',
     this.district,
     this.municipality,
   });
@@ -107,7 +140,14 @@ class TournamentSummary {
   final int teamsConfirmed;
 
   /// Todas as vagas estão ocupadas por equipas confirmadas.
+  /// Sem vaga livre agora: todas estão reservadas ou confirmadas (pode ainda abrir vaga se uma reserva falhar).
   final bool isFull;
+
+  /// Lotado: todas as vagas estão confirmadas (já não abre nenhuma).
+  final bool isSoldOut;
+
+  /// male, female, non_binary, other ou mixed (misto: todos os géneros).
+  final String gender;
   final int maxTeams;
   final int minAge;
   final int? maxAge;
@@ -125,8 +165,10 @@ class TournamentSummary {
   /// Equipas criadas que ainda não estão confirmadas.
   int get teamsInFormation => (teamsRegistered - teamsConfirmed).clamp(0, teamsRegistered);
 
-  /// Etiqueta laranja "Cheio": só faz sentido enquanto as inscrições estão abertas.
+  /// Etiqueta de vagas: só faz sentido enquanto as inscrições estão abertas.
+  /// "Lotado" (laranja) = todas confirmadas; "Reservado" (azul) = todas reservadas ou confirmadas, mas nem todas confirmadas.
   bool get showFullFlag => status == 'registration_open' && isFull;
+  bool get showSoldOut => showFullFlag && isSoldOut;
 
   factory TournamentSummary.fromJson(Map<String, dynamic> j) {
     final confirmed = (j['teamsConfirmed'] as num?)?.toInt() ?? 0;
@@ -152,6 +194,8 @@ class TournamentSummary {
         registrationClosesAt: DateTime.parse(j['registrationClosesAt'].toString()).toLocal(),
         teamsConfirmed: confirmed,
         isFull: j['isFull'] is bool ? j['isFull'] as bool : (max > 0 && confirmed >= max),
+        gender: (j['gender'] ?? 'mixed').toString(),
+        isSoldOut: j['isSoldOut'] is bool ? j['isSoldOut'] as bool : (max > 0 && confirmed >= max),
       );
   }
 }
@@ -188,12 +232,21 @@ class TeamSummary {
     required this.name,
     required this.colorHex,
     this.confirmed = false,
+    this.isPrivate = false,
+    this.state = 'forming',
   });
 
   final String id;
   final String name;
   final String colorHex;
   final bool confirmed;
+  final bool isPrivate;
+
+  /// forming, queued, reserved (em pagamento) ou confirmed.
+  final String state;
+
+  /// Verde = aceita pedidos de entrada; vermelho = privada (só convites) ou já fechada.
+  bool get isOpen => !isPrivate && state == 'forming';
 
   Color get color {
     final hex = colorHex.replaceFirst('#', '');
@@ -206,6 +259,8 @@ class TeamSummary {
         name: (j['name'] ?? '').toString(),
         colorHex: (j['colorHex'] ?? '#888888').toString(),
         confirmed: j['confirmed'] == true,
+        isPrivate: j['isPrivate'] == true,
+        state: (j['state'] ?? (j['confirmed'] == true ? 'confirmed' : 'forming')).toString(),
       );
 }
 
@@ -256,7 +311,11 @@ class TournamentDetail {
     required this.ineligibleReason,
     required this.myTeamId,
     required this.myTeam,
+    this.rules = '',
   });
+
+  /// Regulamento (texto do gestor; por agora um texto de exemplo).
+  final String rules;
 
   final TournamentSummary summary;
   final String? description;
@@ -294,6 +353,7 @@ class TournamentDetail {
       myTeam: j['myTeam'] is Map
           ? MyTeamBrief.fromJson(Map<String, dynamic>.from(j['myTeam'] as Map))
           : null,
+      rules: (j['rules'] ?? '').toString(),
     );
   }
 }

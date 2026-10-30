@@ -36,8 +36,8 @@ public class TournamentRulesTests
 
     [Theory]
     [InlineData(null, new[] { "registration_open", "registration_closed", "ongoing", "finished" })]
-    [InlineData("open", new[] { "registration_open" })]
-    [InlineData("ongoing", new[] { "registration_closed", "ongoing" })]
+    [InlineData("open", new[] { "registration_open", "registration_closed" })]
+    [InlineData("ongoing", new[] { "ongoing" })]
     [InlineData("finished", new[] { "finished" })]
     [InlineData("mine", new[] { "registration_open", "registration_closed", "ongoing", "finished" })]
     public void Status_filters_map_to_statuses(string? filter, string[] expected) =>

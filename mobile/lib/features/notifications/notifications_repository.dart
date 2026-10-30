@@ -17,6 +17,16 @@ class NotificationsRepository {
     return (res.json['count'] as num?)?.toInt() ?? 0;
   }
 
+  /// Apaga uma notificação da central.
+  Future<void> delete(String id) async {
+    (await _api.delete('/api/v1/notifications/$id', auth: true)).ensureOk();
+  }
+
+  /// "Limpar tudo".
+  Future<void> deleteAll() async {
+    (await _api.delete('/api/v1/notifications', auth: true)).ensureOk();
+  }
+
   Future<void> markAllRead() async {
     (await _api.post('/api/v1/notifications/read-all', auth: true)).ensureOk();
   }

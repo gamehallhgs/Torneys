@@ -16,6 +16,12 @@ class GamesRepository {
     return data.map((e) => Game.fromJson(Map<String, dynamic>.from(e as Map))).toList();
   }
 
+  /// Próximo jogo do torneio e o próximo do utilizador (página de um torneio a decorrer).
+  Future<NextGames> nextGames(String tournamentId) async {
+    final res = (await _api.get('/api/v1/tournaments/$tournamentId/next-games', auth: true)).ensureOk();
+    return NextGames.fromJson(res.json);
+  }
+
   Future<GameDetail> game(String gameId) async {
     final res = (await _api.get('/api/v1/games/$gameId', auth: true)).ensureOk();
     return GameDetail.fromJson(res.json);

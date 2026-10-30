@@ -3,8 +3,9 @@ using GameHall.Api.Common;
 namespace GameHall.Api.Modules.Notifications;
 
 /// <summary>
-/// Central de notificações do utilizador (exige sessão e termos em dia). Para já só existem convites de equipa;
-/// aceitar/recusar usa os endpoints de convites das equipas (POST /api/v1/invites/{id}/accept|decline).
+/// Central de notificações do utilizador (exige sessão e termos em dia). Convites e pedidos para entrar têm
+/// aceitar/recusar (POST /api/v1/invites/{id}/accept|decline e /api/v1/join-requests/{id}/accept|reject);
+/// os eventos de equipa (fechada, vaga reservada, confirmada) são só informativos.
 /// </summary>
 public static class NotificationEndpoints
 {
@@ -19,13 +20,8 @@ public static class NotificationEndpoints
                 return Results.Unauthorized();
             }
 
-            var rows = await store.ListAsync(uid, ct);
-            var items = rows.Select(r => new NotificationDto(
-                r.Id, r.Type, r.CreatedAt, r.IsRead,
-                new TeamInviteDto(
-                    r.InviteId, r.InviteStatus, r.TeamId, r.TeamName, r.ColorHex,
-                    r.TournamentId, r.TournamentName, r.InvitedByName, r.InvitedByUsername))).ToList();
-            return Results.Ok(new NotificationListDto(rows.Count(r => !r.IsRead), items));
+            var items = await store.ListAsync(uid, ct);
+            return Results.Ok(new NotificationListDto(items.Count(n => !n.Read), items));
         });
 
         // Leve: a app pergunta de tempos a tempos para mostrar (ou não) o pontinho vermelho.
@@ -42,6 +38,29 @@ public static class NotificationEndpoints
             }
 
             await store.MarkAllReadAsync(uid, ct);
+            return Results.NoContent();
+        });
+
+        // Apagar uma notificação ou limpar a central. Um convite/pedido apagado continua a poder ser respondido
+        // pelo lobby; só desaparece da central.
+        g.MapDelete("/{id:guid}", async (Guid id, HttpContext ctx, NotificationStore store, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            return await store.DeleteAsync(uid, id, ct) ? Results.NoContent() : Results.NotFound();
+        });
+
+        g.MapDelete("", async (HttpContext ctx, NotificationStore store, CancellationToken ct) =>
+        {
+            if (ctx.UserId() is not { } uid)
+            {
+                return Results.Unauthorized();
+            }
+
+            await store.DeleteAllAsync(uid, ct);
             return Results.NoContent();
         });
     }

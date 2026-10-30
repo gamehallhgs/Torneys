@@ -18,7 +18,7 @@ public enum UsernameChangeResult
     Unchanged,
     Taken,
     RecentlyUsed,
-    Cooldown,
+    ChangeUsed,
     UserNotFound
 }
 
@@ -28,7 +28,7 @@ public sealed class CurrentUsernameRow
     public DateTime? UsernameChangedAt { get; set; }
 }
 
-public sealed record UsernameChange(UsernameChangeResult Result, DateTime? NextChangeAt = null, string? Username = null);
+public sealed record UsernameChange(UsernameChangeResult Result, string? Username = null);
 
 /// <summary>SQL dos usernames (disponibilidade, mudança, procura por username#tag e falhas de procura).</summary>
 public sealed class UsernameStore(NpgsqlDataSource db)
@@ -57,7 +57,7 @@ public sealed class UsernameStore(NpgsqlDataSource db)
             : UsernameAvailability.Available;
     }
 
-    /// <summary>Muda o username (1 vez por mês). O antigo fica reservado 30 dias. Tudo numa transação.</summary>
+    /// <summary>Muda o username (só 1 vez por conta). O antigo fica reservado 30 dias. Tudo numa transação.</summary>
     public async Task<UsernameChange> ChangeAsync(Guid userId, string newUsername, DateTime now, CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -73,13 +73,12 @@ public sealed class UsernameStore(NpgsqlDataSource db)
 
         if (current.Username == newUsername)
         {
-            return new UsernameChange(UsernameChangeResult.Unchanged, Username: newUsername);
+            return new UsernameChange(UsernameChangeResult.Unchanged, newUsername);
         }
 
-        var next = UsernameRules.NextChangeAt(current.UsernameChangedAt, now);
-        if (next is not null)
+        if (UsernameRules.ChangesLeft(current.UsernameChangedAt) <= 0)
         {
-            return new UsernameChange(UsernameChangeResult.Cooldown, next);
+            return new UsernameChange(UsernameChangeResult.ChangeUsed);
         }
 
         var args = new { U = newUsername, Me = (Guid?)userId, Since = now.AddDays(-UsernameRules.ReservedAfterChangeDays) };
@@ -112,7 +111,7 @@ public sealed class UsernameStore(NpgsqlDataSource db)
                 new { U = newUsername, Now = now, Id = userId }, tx, cancellationToken: ct));
 
             await tx.CommitAsync(ct);
-            return new UsernameChange(UsernameChangeResult.Changed, Username: newUsername);
+            return new UsernameChange(UsernameChangeResult.Changed, newUsername);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
         {

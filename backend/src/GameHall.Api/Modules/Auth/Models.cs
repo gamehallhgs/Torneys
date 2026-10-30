@@ -28,6 +28,9 @@ public sealed class User
     public string UsernameTag { get; set; } = "";
     public DateTime? UsernameChangedAt { get; set; }
     public DateOnly BirthDate { get; set; }
+    public string Gender { get; set; } = "other";
+    public DateTime? OnboardingSeenAt { get; set; }
+    public bool PushEnabled { get; set; } = true;
     public UserRole Role { get; set; }
     public DateTime? EmailVerifiedAt { get; set; }
     public int FailedLoginCount { get; set; }
@@ -91,7 +94,8 @@ public sealed record RegisterRequest(
     bool AcceptPrivacy,
     string? TermsVersion,
     string? PrivacyVersion,
-    string? Username = null);
+    string? Username = null,
+    string? Gender = null);
 
 public sealed record EmailCodeRequest(string? Email, string? Code);
 
@@ -114,7 +118,8 @@ public sealed record DeleteAccountRequest(string? Password);
 /// <summary>O próprio utilizador. A tag só é devolvida ao próprio (é com ela que os outros o convidam).</summary>
 public sealed record UserDto(
     Guid Id, string Email, string DisplayName, string Role, bool EmailVerified, DateOnly BirthDate,
-    string Username = "", string UsernameTag = "", DateTime? UsernameNextChangeAt = null);
+    string Username = "", string UsernameTag = "", int UsernameChangesLeft = 1,
+    string Gender = "other", bool OnboardingSeen = true, bool PushEnabled = true);
 
 public sealed record LegalStatusDto(string TermsVersion, string PrivacyVersion, bool RequiresAcceptance);
 

@@ -23,11 +23,20 @@ public sealed class TournamentRow
     public int EntryFeeCents { get; set; }
     public int MinAge { get; set; }
     public int? MaxAge { get; set; }
+    public string Gender { get; set; } = "mixed";
     public int MaxTeams { get; set; }
     public int MinPlayersPerTeam { get; set; }
     public int MaxPlayersPerTeam { get; set; }
+    public string? RulesText { get; set; }
+
+    /// <summary>Quando terminou (resultado do último jogo publicado) e quantas horas depois ainda se abrem votações.</summary>
+    public DateTime? FinishedAt { get; set; }
+    public int? VotingWindowHours { get; set; }
     public int TeamsRegistered { get; set; }
     public int TeamsConfirmed { get; set; }
+
+    /// <summary>Vagas ocupadas (reservadas a pagar ou confirmadas).</summary>
+    public int TeamsReserved { get; set; }
 }
 
 public sealed class TeamRow
@@ -36,6 +45,8 @@ public sealed class TeamRow
     public string Name { get; set; } = "";
     public string ColorHex { get; set; } = "";
     public bool Confirmed { get; set; }
+    public bool IsPrivate { get; set; }
+    public string State { get; set; } = "forming";
 }
 
 /// <summary>Equipa do utilizador num torneio (para o resumo no detalhe).</summary>
@@ -52,7 +63,7 @@ public sealed class MyTeamBriefRow
 /// <param name="MemberOf">Só torneios onde este utilizador está numa equipa (filtro "mine").</param>
 public sealed record TournamentFilter(
     string? Status, DateOnly? From, DateOnly? To, string? Sport, int Page, int PageSize, Guid? MemberOf = null,
-    string? District = null, string? Municipality = null);
+    string? District = null, string? Municipality = null, string? MineScope = null);
 
 // ----- DTOs (o que a API devolve) -----
 
@@ -76,12 +87,16 @@ public sealed record TournamentSummaryDto(
     string AgeLabel,
     DateTime RegistrationClosesAt,
     int TeamsConfirmed,
-    bool IsFull);
+    bool IsFull,
+    bool IsSoldOut = false,
+    string Gender = "mixed");
 
 public sealed record TournamentPageDto(
     IReadOnlyList<TournamentSummaryDto> Items, int Total, int Page, int PageSize);
 
-public sealed record TeamDto(Guid Id, string Name, string ColorHex, bool Confirmed);
+/// <summary>State: forming, queued, reserved (em pagamento), confirmed. IsPrivate = só se entra por convite.</summary>
+public sealed record TeamDto(
+    Guid Id, string Name, string ColorHex, bool Confirmed, bool IsPrivate = false, string State = "forming");
 
 public sealed record EligibilityDto(bool CanCreateTeam, string? Reason);
 
@@ -99,4 +114,5 @@ public sealed record TournamentDetailDto(
     IReadOnlyList<TeamDto> Teams,
     EligibilityDto Eligibility,
     Guid? MyTeamId,
-    MyTeamBriefDto? MyTeam);
+    MyTeamBriefDto? MyTeam,
+    string Rules = "");

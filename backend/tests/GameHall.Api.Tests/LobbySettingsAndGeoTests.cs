@@ -7,26 +7,26 @@ namespace GameHall.Api.Tests;
 public class LobbySettingsTests
 {
     [Fact]
-    public void Closed_lobby_blocks_join_requests()
+    public void Private_lobby_blocks_join_requests()
     {
-        Assert.Equal("lobby_closed",
-            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 5, 14, false, lobbyClosed: true));
+        Assert.Equal("lobby_private",
+            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 5, 14, false, isPrivate: true));
         Assert.Null(
-            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 5, 14, false, lobbyClosed: false));
+            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 5, 14, false, isPrivate: false));
     }
 
     [Fact]
-    public void Closed_lobby_does_not_hide_more_specific_reasons()
+    public void Private_lobby_does_not_hide_more_specific_reasons()
     {
         // Quem já está noutra equipa, não tem idade ou o lobby já está cheio vê esse motivo, não "fechado".
         Assert.Equal("already_in_team",
-            TeamRules.JoinBlockedReason(true, false, "registration_open", true, 16, null, 20, 5, 14, false, lobbyClosed: true));
+            TeamRules.JoinBlockedReason(true, false, "registration_open", true, 16, null, 20, 5, 14, false, isPrivate: true));
         Assert.Equal("age_too_young",
-            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 15, 5, 14, false, lobbyClosed: true));
+            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 15, 5, 14, false, isPrivate: true));
         Assert.Equal("team_full",
-            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 14, 14, false, lobbyClosed: true));
+            TeamRules.JoinBlockedReason(true, false, "registration_open", false, 16, null, 20, 14, 14, false, isPrivate: true));
         Assert.Equal("already_member",
-            TeamRules.JoinBlockedReason(true, true, "registration_open", false, 16, null, 20, 5, 14, false, lobbyClosed: true));
+            TeamRules.JoinBlockedReason(true, true, "registration_open", false, 16, null, 20, 5, 14, false, isPrivate: true));
     }
 
     [Theory]

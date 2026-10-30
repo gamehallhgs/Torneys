@@ -45,6 +45,15 @@ public sealed class HighlightRow
     public int DurationSeconds { get; set; }
 }
 
+public sealed class SquadRow
+{
+    public string DisplayName { get; set; } = "";
+    public string? Position { get; set; }
+    public int? Slot { get; set; }
+    public string? Formation { get; set; }
+    public string Sport { get; set; } = "";
+}
+
 public sealed class StandingsGameRow
 {
     public Guid? HomeTeamId { get; set; }
@@ -97,12 +106,24 @@ public sealed record GameEventDto(Guid Id, Guid TeamId, string PlayerName, strin
 
 public sealed record HighlightDto(Guid Id, string Url, string? Title, int DurationSeconds);
 
+/// <summary>Jogador no plantel de um jogo. Slot null = suplente; 0 = guarda-redes.</summary>
+public sealed record SquadPlayerDto(string DisplayName, string? Position, int? Slot, bool IsStarter);
+
+/// <summary>
+/// Plantel de uma equipa num jogo. IsFormal = o líder definiu a formação e os titulares; senão é só a lista dos
+/// membros da equipa, ordenada por posição (guarda-redes ao avançado). Por agora é sempre o plantel por defeito da equipa
+/// (definido pelo líder antes de fechar); mais tarde o gestor/árbitro poderá alterá-lo por jogo.
+/// </summary>
+public sealed record SquadDto(string? Formation, IReadOnlyList<SquadPlayerDto> Players, bool IsFormal = false);
+
 public sealed record GameDetailDto(
     GameDto Game,
     Guid TournamentId,
     string TournamentName,
     IReadOnlyList<GameEventDto> Events,
-    IReadOnlyList<HighlightDto> Highlights);
+    IReadOnlyList<HighlightDto> Highlights,
+    SquadDto? HomeSquad = null,
+    SquadDto? AwaySquad = null);
 
 public sealed record StandingRowDto(
     int Position,
@@ -131,3 +152,6 @@ public sealed record StatsDto(
     IReadOnlyList<StatLineDto> Assists,
     IReadOnlyList<StatLineDto> YellowCards,
     IReadOnlyList<StatLineDto> RedCards);
+
+/// <summary>Próximo jogo do torneio e próximo jogo do utilizador (null = não há / não joga).</summary>
+public sealed record NextGamesDto(GameDto? Next, GameDto? Mine);

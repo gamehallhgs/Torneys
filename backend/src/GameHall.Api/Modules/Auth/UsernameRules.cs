@@ -9,8 +9,13 @@ public static partial class UsernameRules
     public const int MaxLength = 20;
     public const int TagLength = 3;
 
-    /// <summary>Quantos dias o username antigo fica reservado e o tempo mínimo entre mudanças.</summary>
-    public const int ChangeCooldownDays = 30;
+    /// <summary>
+    /// Mudanças de username gratuitas por conta: só 1 (o username escolhido ao registar não conta). Mais mudanças
+    /// serão pagas no futuro (ainda não implementado: por agora a conta não pode mudar mais).
+    /// </summary>
+    public const int FreeChanges = 1;
+
+    /// <summary>Quantos dias o username antigo fica reservado depois de mudar.</summary>
     public const int ReservedAfterChangeDays = 30;
 
     /// <summary>Tentativas falhadas de convidar por username#tag permitidas por hora, por utilizador.</summary>
@@ -82,6 +87,11 @@ public static partial class UsernameRules
             return "Este username não está disponível.";
         }
 
+        if (GameHall.Api.Common.ProfanityFilter.Contains(username))
+        {
+            return GameHall.Api.Common.ProfanityFilter.Message;
+        }
+
         return null;
     }
 
@@ -116,15 +126,8 @@ public static partial class UsernameRules
     private static bool IsWellFormed(string username) =>
         Shape().IsMatch(username) && !username.Contains("..", StringComparison.Ordinal);
 
-    /// <summary>Quando é que o utilizador volta a poder mudar o username (null = já pode).</summary>
-    public static DateTime? NextChangeAt(DateTime? lastChangedAt, DateTime now)
-    {
-        if (lastChangedAt is null)
-        {
-            return null;
-        }
-
-        var next = lastChangedAt.Value.AddDays(ChangeCooldownDays);
-        return next > now ? next : null;
-    }
+    /// <summary>
+    /// Mudanças gratuitas que ainda restam: 1 se nunca mudou (username_changed_at vazio), 0 depois de usar a mudança.
+    /// </summary>
+    public static int ChangesLeft(DateTime? lastChangedAt) => lastChangedAt is null ? FreeChanges : 0;
 }

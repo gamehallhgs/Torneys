@@ -42,7 +42,7 @@ void main() {
   });
 
   group('AppUser', () {
-    AppUser user({DateTime? next}) => AppUser(
+    AppUser user({int changesLeft = 1}) => AppUser(
           id: '1',
           email: 'a@b.pt',
           displayName: 'Hugo Dias',
@@ -51,12 +51,12 @@ void main() {
           birthDate: '2000-01-01',
           username: 'hugo',
           usernameTag: '482',
-          usernameNextChangeAt: next,
+          usernameChangesLeft: changesLeft,
         );
 
     test('handle', () => expect(user().handle, '@hugo#482'));
 
-    test('lê username, tag e quando pode mudar', () {
+    test('lê username, tag e quantas mudanças restam', () {
       final u = AppUser.fromJson({
         'id': '1',
         'email': 'a@b.pt',
@@ -66,22 +66,22 @@ void main() {
         'birthDate': '2000-01-01',
         'username': 'hugo',
         'usernameTag': '482',
-        'usernameNextChangeAt': '2026-11-20T10:00:00Z',
+        'usernameChangesLeft': 0,
       });
       expect(u.username, 'hugo');
       expect(u.usernameTag, '482');
-      expect(u.usernameNextChangeAt, isNotNull);
+      expect(u.usernameChangesLeft, 0);
+      expect(u.canChangeUsername, isFalse);
     });
 
-    test('só pode mudar quando passa a data', () {
-      final now = DateTime(2026, 10, 24);
-      expect(user().canChangeUsername(now: now), isTrue);
-      expect(user(next: DateTime(2026, 11, 20)).canChangeUsername(now: now), isFalse);
-      expect(user(next: DateTime(2026, 10, 1)).canChangeUsername(now: now), isTrue);
+    test('só pode mudar uma vez', () {
+      expect(user().canChangeUsername, isTrue);
+      expect(user(changesLeft: 0).canChangeUsername, isFalse);
+      expect(AppUser.fromJson({'id': '1'}).canChangeUsername, isTrue);
     });
 
     test('mudar o username mantém a tag', () {
-      final u = user().copyWith(username: 'hugo.novo', usernameNextChangeAt: DateTime(2026, 11, 23));
+      final u = user().copyWith(username: 'hugo.novo', usernameChangesLeft: 0);
       expect(u.handle, '@hugo.novo#482');
     });
 
