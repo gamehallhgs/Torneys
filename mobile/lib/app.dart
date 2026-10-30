@@ -96,7 +96,7 @@ class _SplashLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/logo.png',
+      'assets/images/logos.png',
       height: 90,
       errorBuilder: (context, error, stack) => const Text(
         'GAME HALL',
